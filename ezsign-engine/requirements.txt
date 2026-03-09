@@ -1,0 +1,14 @@
+# --- Database & Data Processing ---
+sqlalchemy    # Buat koneksi Python ke SQLite (ORM/Engine)
+pandas        # Buat manipulasi data tabel biar sat-set
+
+# --- File System & Automation ---
+watchdog      # Si 'Satpam' buat deteksi file PDF baru secara real-time
+
+# --- PDF Processing ---
+pymupdf       # Si 'Otak' buat bedah sertifikat digital di dalem PDF
+pikepdf       # Extract signature bytes dari struktur PDF AcroForm
+asn1crypto    # Parse konten PKCS7/X.509 sertifikat digital
+
+python-dotenv
+

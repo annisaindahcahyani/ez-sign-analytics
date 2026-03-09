@@ -1,0 +1,24 @@
+{
+    "code": 200,
+    "timestamp": 1772080637768,
+    "message": "Success",
+    "success": true,
+    "data": [
+        {
+            "Signature Algorithm": "RSA 2048 bits",
+            "code": 200,
+            "Issuer": "CN=BSRE CA DS G1, O=Badan Siber dan Sandi Negara, C=ID",
+            "Signer ": "511002ZEFGABLO0F_Tanda Tangan Elektronik",
+            "SubjectDN": "C=ID, O=Universitas Indonesia, CN=Agus Sunjarianto Pamitran",
+            "Certificate Status": "Certificate Not Expire",
+            "Serial Number": "18828C2BBA1D9A248E77AC10B61CB6C8E14FED01",
+            "LTV": "Support LTV",
+            "Certificate valid": "Valid",
+            "Validity": "From Mon Aug 11 2025 To Wed Aug 11 2027",
+            "timestamp signature": "verified",
+            "Verify_Certificate_Chain": "verified",
+            "File hash Validation": "File hash Valid",
+            "Signature": "verified"
+        }
+    ]
+}

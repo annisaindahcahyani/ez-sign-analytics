@@ -13,3 +13,6 @@ asn1crypto    # Parse konten PKCS7/X.509 sertifikat digital
 python-dotenv
 flask
 flask-cors
+fastapi
+uvicorn
+python-multipart

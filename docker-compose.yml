@@ -3,6 +3,8 @@ services:
   engine:
     build: ./ezsign-engine
     container_name: ezsign_analytics_engine
+    ports:
+      - "0.0.0.0:3001:8000" # Biar bisa diakses di localhost:3001
     volumes:
       - ./ezsign-engine:/app
       - ./data:/data
@@ -17,7 +19,7 @@ services:
     build: ./ezsign-frontend
     container_name: ezsign_analytics_frontend
     ports:
-      - "3000:3000" # Biar bisa dibuka di localhost:3000
+      - "0.0.0.0:3000:3000" # Biar bisa dibuka di localhost:3000
     volumes:
       - ./data:/app/data # Biar FE bisa titip file ke folder staging di 'data'
     depends_on:

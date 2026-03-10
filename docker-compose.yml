@@ -12,13 +12,16 @@ services:
       - DATABASE_PATH=/data/database.sqlite
     restart: always
 
-  # --- Service Frontend (Baru Lo Clone!) ---
+# --- Service Frontend (Update Version!) ---
   frontend:
     build: ./ezsign-frontend
     container_name: ezsign_analytics_frontend
     ports:
-      - "3000:3000" # Biar bisa dibuka di localhost:3000
+      - "3000:3000"
     volumes:
-      - ./data:/app/data # Biar FE bisa titip file ke folder staging di 'data'
+      - ./ezsign-frontend:/app    # <--- TAMBAHIN INI (Biar kodingan FE sync ke Docker)
+      - /app/node_modules         # <--- TAMBAHIN INI (ZONASI AMAN: Biar pnpm Docker gak berantem sama laptop)
+      - /app/.next                # <--- TAMBAHIN INI (ZONASI AMAN: Biar cache gak bentrok)
+      - ./data:/app/data          # (Ini udah bener, buat jembatan titip file)
     depends_on:
       - engine

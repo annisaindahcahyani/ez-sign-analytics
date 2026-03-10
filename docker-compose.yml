@@ -9,6 +9,7 @@ services:
       - ./ezsign-engine:/app
       - ./data:/data # Shared Volume
     environment:
+      - STAGING_PATH=/data/staging
       - PYTHONUNBUFFERED=1
       - DATABASE_PATH=/data/database.sqlite
       - CORPORATE_CODE=ezsign

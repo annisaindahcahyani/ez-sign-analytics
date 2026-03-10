@@ -1,21 +1,4 @@
-version: '3.8'
-
 services:
-  # Service buat Next.js (Tim FE)
-  frontend:
-    build:
-      context: ./ezsign-frontend
-      dockerfile: Dockerfile
-    container_name: ezsign_frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./ezsign-frontend:/app
-      - /app/node_modules
-      - ./data:/data # Shared Volume
-    environment:
-      - NODE_ENV=development
-
   # Service buat Python Engine (Lo, Ca!)
   engine:
     build:
@@ -25,9 +8,9 @@ services:
     volumes:
       - ./ezsign-engine:/app
       - ./data:/data # Shared Volume
-    depends_on:
-      - frontend
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_PATH=/data/ezsign_analytics.db
+      - DATABASE_PATH=/data/database.sqlite
+      - CORPORATE_CODE=ezsign
+      - CORPORATE_NAME=PT Solusi Identitas Global Net
     restart: always

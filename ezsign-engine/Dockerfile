@@ -18,4 +18,4 @@ COPY . .
 RUN mkdir -p /data/staging /data/output
 
 # Jalankan script watcher (atau extractor) pas kontainer nyala
-CMD ["python", "extractor.py"]
+CMD ["python", "scripts/watcher.py"]

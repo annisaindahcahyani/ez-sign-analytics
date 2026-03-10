@@ -32,7 +32,10 @@ def parse_validity_days(validity_str):
         normalized = validity_str.replace("WIB ", "")
         if "To " in normalized:
             end_date_str = normalized.split("To ")[-1].strip()
-            end_dt = datetime.strptime(end_date_str, "%a %b %d %H:%M:%S %Y")
+            if "T" in end_date_str or "-" in end_date_str:
+                end_dt = datetime.fromisoformat(end_date_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            else:
+                end_dt = datetime.strptime(end_date_str, "%a %b %d %H:%M:%S %Y")
             delta = end_dt - datetime.now()
             return max(0, delta.days), 1 if delta.days < 0 else 0
     except Exception:
@@ -162,6 +165,9 @@ def normalize_json_entry(entry, parent_code=200):
     ts_status = entry.get("timestamp signature") or entry.get("timestampsignature")
     chain_status = entry.get("Verify_Certificate_Chain")
     error_message = entry.get("Error Undefined") or entry.get("reason") or entry.get("message")
+    reason = entry.get("reason")
+    location = entry.get("location")
+    local_timestamp = entry.get("local_timestamp")
 
     code = entry.get("code", parent_code)
     return {
@@ -175,9 +181,13 @@ def normalize_json_entry(entry, parent_code=200):
         "LTV": ltv,
         "FilehashValidation": file_hash,
         "Signature": signature_status,
+        "TSA": entry.get("TSA"),
         "timestampsignature": ts_status,
         "Verify_Certificate_Chain": chain_status,
         "Error": error_message,
+        "Reason": reason,
+        "Location": location,
+        "LocalTimestamp": local_timestamp,
     }
 
 
@@ -207,6 +217,9 @@ def build_entries_from_json(raw_file_path):
             "timestampsignature": None,
             "Verify_Certificate_Chain": None,
             "Error": payload.get("reason") or payload.get("message"),
+            "Reason": payload.get("reason"),
+            "Location": payload.get("location"),
+            "LocalTimestamp": payload.get("local_timestamp"),
         }]
 
     return entries, timestamp
@@ -285,8 +298,15 @@ def build_entries_from_pdf(raw_file_path):
     return entries, global_ts
 
 def ensure_dim_date(cursor, dt_obj):
+    result = cursor.execute(
+        "SELECT c3_date_key FROM esa_dim_date_c3 WHERE c3_full_date=? AND c3_hour=?",
+        (dt_obj.strftime("%Y-%m-%d"), dt_obj.hour),
+    ).fetchone()
+    if result:
+        return result[0]
+
     cursor.execute(
-        """INSERT OR IGNORE INTO esa_dim_date_c3
+        """INSERT INTO esa_dim_date_c3
            (c3_full_date, c3_month_name, c3_year, c3_day, c3_hour)
            VALUES (?, ?, ?, ?, ?)""",
         (dt_obj.strftime("%Y-%m-%d"), dt_obj.strftime("%B"), dt_obj.year, dt_obj.day, dt_obj.hour),
@@ -299,9 +319,15 @@ def ensure_dim_date(cursor, dt_obj):
 
 
 def ensure_dim_corporate(cursor):
-    # Pake variabel yang lo ambil dari load_dotenv() di atas
+    result = cursor.execute(
+        "SELECT c4_corpo_key FROM esa_dim_corporate_c4 WHERE c4_corpo_code=?",
+        (CORPO_CODE,),
+    ).fetchone()
+    if result:
+        return result[0]
+
     cursor.execute(
-        "INSERT OR IGNORE INTO esa_dim_corporate_c4 (c4_corpo_code, c4_corpo_name) VALUES (?, ?)",
+        "INSERT INTO esa_dim_corporate_c4 (c4_corpo_code, c4_corpo_name) VALUES (?, ?)",
         (CORPO_CODE, CORPO_NAME),
     )
     result = cursor.execute(
@@ -325,43 +351,61 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
         subject_dn = entry.get("SubjectDN") or "N/A"
         serial_number = entry.get("SerialNumber") or entry.get("Serial Number")
         issuer_raw = entry.get("Issuer") or "CN=Unknown Issuer, O=None"
+        signer_fingerprint = stable_id(f"{signer_name}|{subject_dn}|{serial_number or issuer_raw}")
 
         # --- B. GET SIGNER ID (C1) ---
         if serial_number:
             cursor.execute(
-                "INSERT OR IGNORE INTO esa_dim_signer_c1 (c1_signer_name, c1_subject_dn, c1_serial_number) VALUES (?, ?, ?)",
-                (signer_name, subject_dn, serial_number),
+                "INSERT OR IGNORE INTO esa_dim_signer_c1 (c1_signer_name, c1_subject_dn, c1_serial_number, c1_sha1_fingerprint) VALUES (?, ?, ?, ?)",
+                (signer_name, subject_dn, serial_number, signer_fingerprint),
             )
             signer_id = cursor.execute(
                 "SELECT c1_signer_key FROM esa_dim_signer_c1 WHERE c1_serial_number=?", (serial_number,)
             ).fetchone()[0]
         else:
             cursor.execute(
-                "INSERT INTO esa_dim_signer_c1 (c1_signer_name, c1_subject_dn, c1_serial_number) VALUES (?, ?, NULL)",
-                (signer_name, subject_dn),
+                "INSERT INTO esa_dim_signer_c1 (c1_signer_name, c1_subject_dn, c1_serial_number, c1_sha1_fingerprint) VALUES (?, ?, NULL, ?)",
+                (signer_name, subject_dn, signer_fingerprint),
             )
             signer_id = cursor.lastrowid
 
         # --- C. GET ISSUER ID (C2) & TSA STATUS ---
         issuer_parts = parse_issuer_atomic(issuer_raw)
         psre_list = ["BSRE", "SIGN CA", "SOLUSI IDENTITAS", "PERURI", "TILAKA", "PRIVY", "VIDA", "DIGISIGN"]
-        tsa_status = 'Official PSrE' if any(x in (issuer_raw or "").upper() for x in psre_list) else 'Self-Signed'
-        
-        cursor.execute(
-            "INSERT OR IGNORE INTO esa_dim_issuer_c2 (c2_full_distinguished_name, c2_common_name, c2_organization, c2_country, c2_sig_algo) VALUES (?, ?, ?, ?, ?)",
-            (issuer_raw, issuer_parts["CN"], issuer_parts["O"], issuer_parts["C"], entry.get("SignatureAlgorithm")),
-        )
-        issuer_id = cursor.execute(
-            "SELECT c2_issuer_key FROM esa_dim_issuer_c2 WHERE c2_full_distinguished_name=?", (issuer_raw,)
-        ).fetchone()[0]
+        is_berinduk = 1 if any(x in (issuer_raw or "").upper() for x in psre_list) else 0
+
+        issuer_row = cursor.execute(
+            "SELECT c2_issuer_key FROM esa_dim_issuer_c2 WHERE c2_full_distinguished_name=?",
+            (issuer_raw,),
+        ).fetchone()
+        if issuer_row:
+            issuer_id = issuer_row[0]
+        else:
+            cursor.execute(
+                """INSERT INTO esa_dim_issuer_c2
+                   (c2_full_distinguished_name, c2_common_name, c2_organization, c2_country, c2_sig_algo, c2_is_berinduk)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (issuer_raw, issuer_parts["CN"], issuer_parts["O"], issuer_parts["C"], entry.get("SignatureAlgorithm"), is_berinduk),
+            )
+            issuer_id = cursor.lastrowid
 
         # --- D. GET INTEGRITY ID (C5) ---
         code = entry.get("code", 500)
         is_trusted = 1 if code == 200 or entry.get("Signature") == "verified" else 0
         
         cursor.execute(
-            "INSERT INTO esa_dim_integrity_c5 (c5_status_code, c5_status_type, c5_integrity_desc, c5_error_message, c5_local_timestamp) VALUES (?, ?, ?, ?, ?)",
-            (code, "Trusted" if is_trusted else "Not Trusted", entry.get("FilehashValidation") or "N/A", entry.get("Error") or "", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            """INSERT INTO esa_dim_integrity_c5
+               (c5_status_code, c5_status_type, c5_integrity_desc, c5_error_message, c5_reason, c5_location, c5_local_timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                code,
+                "Trusted" if is_trusted else "Not Trusted",
+                entry.get("FilehashValidation") or "N/A",
+                entry.get("Error") or "",
+                entry.get("Reason") or "",
+                entry.get("Location") or "",
+                entry.get("LocalTimestamp") or readable_ts,
+            ),
         )
         integrity_id = cursor.lastrowid
 
@@ -385,7 +429,7 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 doc_id, signer_id, issuer_id, date_id, corpo_id, integrity_id,
-                is_trusted, 0, 0, 
+                is_trusted, is_expired, days_left,
                 ltv_status, 
                 tsa_status,
                 entry.get("FilehashValidation") or "Valid",
@@ -432,38 +476,3 @@ def process_metadata(raw_file_path):
         
     finally:
         conn.close()
-
-def normalize_json_entry(entry, parent_code=200):
-    # Cek "Signer " pake spasi atau tanpa spasi
-    signer = entry.get("Signer ") or entry.get("Signer") or "Unknown Signer"
-    
-    # SubjectDN & Issuer (Sesuai Postman lo)
-    subject_dn = entry.get("SubjectDN")
-    issuer = entry.get("Issuer")
-    
-    # Ambil metadata teknis
-    serial_number = entry.get("Serial Number")
-    sig_algo = entry.get("Signature Algorithm")
-    validity = entry.get("Validity")
-    
-    # Status-status penting
-    ltv = entry.get("LTV")
-    file_hash = entry.get("File hash Validation")
-    ts_status = entry.get("timestamp signature")
-    chain_status = entry.get("Verify_Certificate_Chain")
-    
-    return {
-        "code": entry.get("code", parent_code),
-        "Signer": signer,
-        "SubjectDN": subject_dn,
-        "Issuer": issuer,
-        "SerialNumber": serial_number,
-        "SignatureAlgorithm": sig_algo,
-        "Validity": validity,
-        "LTV": ltv,
-        "FilehashValidation": file_hash,
-        "Signature": entry.get("Signature"),
-        "timestampsignature": ts_status,
-        "Verify_Certificate_Chain": chain_status,
-        "Error": entry.get("reason") or ""
-    }

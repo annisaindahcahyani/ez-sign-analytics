@@ -1,14 +1,12 @@
-# Biar Git lo ga pusing ada Git di dalem Git (Nested Git)
-ezsign-frontend/.git
+# Amankan semua isi folder data
+data/
+# Tapi biarin folder staging tetep ada (isinya kosong)
+!data/staging/.gitkeep
 
-# Biar rahasia dapur ga bocor ke GitHub
-ezsign-engine/config/.env
+# Amankan environment & cache lebih menyeluruh
 .env
-
-# Biar sampah Python ga ikut-ikutan
+*.env
 __pycache__/
 *.pyc
-
-# Biar database lokal dan PDF titipan ga masuk GitHub
-data/database.sqlite
-data/staging/*
+.venv/
+venv/

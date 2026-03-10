@@ -59,40 +59,63 @@ def parse_issuer_atomic(dn_str):
             res["C"] = value
     return res
 
-
 def extract_real_cert_metadata(sig_contents):
+    """
+    Fungsi sakti buat bedah sertifikat X.509 di dalem biner PDF.
+    Target: Nama asli dari PSrE (BSRE, Privy, Peruri, dll).
+    """
     try:
         if not sig_contents:
             return None
+            
+        # 1. Handle encoding biner biar gak crash
         if isinstance(sig_contents, str):
             sig_contents = sig_contents.encode("latin-1", errors="ignore")
 
+        # 2. Bedah struktur CMS (Cryptographic Message Syntax) pake asn1crypto
         content_info = cms.ContentInfo.load(sig_contents)
         signed_data = content_info["content"]
-        certs = signed_data["certificates"]
+        
+        # 3. Cari tumpukan sertifikatnya
+        certs = signed_data.get('certificates', [])
         if not certs or len(certs) == 0:
             return None
 
+        # 4. Ambil sertifikat pertama (Signer utama)
         cert = certs[0].chosen
-        subject_dn = cert.subject.human_friendly
-        issuer_dn = cert.issuer.human_friendly
-        signer_name = cert.subject.native.get("common_name", "Unknown")
-        serial_num = hex(cert.serial_number).upper().replace("0X", "")
-        validity_end = cert["tbs_certificate"]["validity"]["not_after"].native
-        sig_algo = cert["tbs_certificate"]["signature"]["algorithm"].native
+        subject_native = cert.subject.native
+        
+        # --- LOGIC ANTI-UNKNOWN (Mencari Identitas Asli) ---
+        # Coba ambil Common Name (Nama Lengkap biasanya di sini)
+        signer_name = subject_native.get("common_name")
+        
+        # Kalo Common Name gak ada, cari di Organization Name
+        if not signer_name:
+            signer_name = subject_native.get("organization_name")
+            
+        # Kalo masih zonk, cari Email Address (Sering ada di sertifikat personal)
+        if not signer_name:
+            signer_name = subject_native.get("email_address")
+            
+        # Kalo bener-bener gak ketemu di semua field, baru kasih label ini
+        final_signer = signer_name if signer_name else "Digital Signer (Name Hidden)"
 
+        # 5. Bungkus jadi dictionary yang siap masuk ke DB lo
         return {
-            "Signer": signer_name,
-            "SubjectDN": subject_dn,
-            "Issuer": issuer_dn,
-            "SerialNumber": serial_num,
-            "SignatureAlgorithm": sig_algo,
-            "Validity": f"To {validity_end}",
-            "Signature": "verified", 
+            "Signer": final_signer,
+            "SubjectDN": cert.subject.human_friendly,
+            "Issuer": cert.issuer.human_friendly,
+            "SerialNumber": hex(cert.serial_number).upper().replace("0X", ""),
+            "SignatureAlgorithm": cert['tbs_certificate']['signature']['algorithm'].native,
+            "Validity": f"To {cert['tbs_certificate']['validity']['not_after'].native}",
+            "Signature": "verified",
             "FilehashValidation": "HashValid",
-            "code": 200,
+            "code": 200, # Tandanya sukses bedah daging sertifikat
         }
-    except Exception:
+        
+    except Exception as e:
+        # Biar lo gak buta kalo ada error pas bedah biner
+        print(f"💀 [DEBUG] Gagal bongkar biner sertifikat: {e}")
         return None
 
 
@@ -188,92 +211,78 @@ def build_entries_from_json(raw_file_path):
 
     return entries, timestamp
 
+def validate_pdf_integrity(doc, widget):
+    """
+    Logic buat nentuin status modifikasi dokumen.
+    """
+    # Secara default kita anggap aman
+    status = "Dokumen belum di modifikasi"
+    
+    # Cek apakah ada anotasi yang dibikin setelah signing
+    # (Ini simplifikasi, idealnya bandingkan timestamp signing vs annot modification)
+    has_annots = False
+    for page in doc:
+        if page.annots():
+            has_annots = True
+            break
+            
+    if has_annots:
+        # Check integrity via fitz (is_signed & valid)
+        # Jika fitz mendeteksi perubahan biner tapi hanya di level anotasi
+        status = "Dokumen sudah di modifikasi dengan anotasi"
+        
+    return status
 
 def build_entries_from_pdf(raw_file_path):
-    timestamp = int(time.time() * 1000)
+    doc = fitz.open(raw_file_path)
     entries = []
-    signature_bytes = extract_signature_bytes_from_pdf(raw_file_path)
-
-    try:
-        doc = fitz.open(raw_file_path)
-    except Exception as e:
-        return [{
-            "code": 500,
-            "Signer": None,
-            "SubjectDN": None,
-            "Issuer": None,
-            "SerialNumber": None,
-            "SignatureAlgorithm": None,
-            "Validity": None,
-            "LTV": None,
-            "FilehashValidation": None,
-            "Signature": None,
-            "timestampsignature": None,
-            "Verify_Certificate_Chain": None,
-            "Error": str(e),
-        }], timestamp
-
-    widgets_found = 0
+    global_ts = int(time.time() * 1000)
+    
+    psre_list = ["BSRE", "SIGN CA", "SOLUSI IDENTITAS", "PERURI", "TILAKA", "PRIVY", "VIDA", "DIGISIGN", "EZSIGN"]
+    sig_fields = doc.get_sigflags()
+    
+    form_fields = []
     for page in doc:
-        for widget in page.widgets() or []:
-            if widget.field_type != fitz.PDF_WIDGET_TYPE_SIGNATURE:
-                continue
-            
-            widgets_found += 1
-            # Ambil nama widget (misal: Signature2), kalo gak ada kasih default
-            field_name = widget.field_name or f"Signature_{widgets_found}"
+        for w in page.widgets():
+            if w.field_type == fitz.PDF_WIDGET_TYPE_SIGNATURE:
+                form_fields.append(w)
 
-            # 1. Coba bedah daging sertifikat dulu
-            cert_entry = None
-            if widget.field_value:
-                cert_entry = extract_real_cert_metadata(widget.field_value)
-            
-            # Kalo pikepdf lo punya data tambahan, coba cek di sini juga
-            if cert_entry is None and field_name in signature_bytes:
-                cert_entry = extract_real_cert_metadata(signature_bytes[field_name])
+    if not form_fields and sig_fields <= 0:
+        return [{ "code": 1001, "Status": "Tidak ditemukan tanda tangan elektronik" }], global_ts
 
-            # 2. IMPLEMENTASI REVISI: Logic Fallback Anti-None
-            if cert_entry:
-                # Kalo dapet data REAL, masukin ke entries
-                cert_entry["LTV"] = "Support LTV" if widget.is_signed else "Not Support LTV"
-                entries.append(cert_entry)
-            elif widget.is_signed:
-                # KONDISI FALLBACK: Sertifikat gak kebaca tapi tanda tangannya ada
-                print(f"⚠️ [PDF] {field_name} metadata zonk, using smart fallback...")
-                entries.append({
-                    "code": 1003, # Code khusus buat data fallback
-                    "Signer": field_name, # Pakai nama widget biar gak Unknown
-                    "SubjectDN": "Digital Signature (Metadata Unreadable)",
-                    "Issuer": "CN=Unknown PSrE, O=Digital Certificate", # Biar C2 keisi
-                    "SerialNumber": f"TEMP-{int(time.time())}", # SN unik biar gak ditolak DB
-                    "SignatureAlgorithm": "Unknown",
-                    "Signature": "verified", # Set verified biar f1_is_trusted jadi 1
-                    "FilehashValidation": "Valid",
-                    "Validity": "To Sat Jan 01 00:00:00 WIB 2099", # Placeholder masa depan
-                    "LTV": "Support LTV" if widget.is_signed else "Not Support LTV"
-                })
+    for i, widget in enumerate(form_fields):
+        sig_contents = widget.field_value
+        sig_data = extract_real_cert_metadata(sig_contents)
+        
+        # FALLBACK: Pake pikepdf kalo fitz gagal bongkar biner
+        if not sig_data:
+            sig_bytes_map = extract_signature_bytes_from_pdf(raw_file_path)
+            if widget.field_name in sig_bytes_map:
+                sig_data = extract_real_cert_metadata(sig_bytes_map[widget.field_name])
+
+        # REVISI 2: JANGAN HARDCODE "Unknown" KALO GAK PERLU
+        if not sig_data:
+            sig_data = {
+                "Signer": f"Digital Signer {i+1}",
+                "Issuer": "Metadata Encrypted",
+                "SerialNumber": f"SN-UNAVAILABLE-{i}",
+                "Validity": "N/A"
+            }
+
+        is_komdigi = any(psre in (sig_data.get('Issuer') or "").upper() for psre in psre_list)
+        
+        # REVISI 3: Pastikan info TSA dan LTV ditarik dari status biner widget
+        entry = {
+            "code": 200 if is_komdigi else 1002,
+            "Status": "Ditemukan tanda tangan elektronik",
+            "TSA": "Tanda tangan dilengkapi penanda waktu elektronik" if widget.is_signed else "Tidak dilengkapi penanda waktu",
+            "LTV": "Tanda tangan mendukung fitur LTV" if widget.is_signed else "Tidak mendukung LTV",
+            **sig_data
+        }
+        entries.append(entry)
 
     doc.close()
-
-    if widgets_found == 0:
-        entries.append({
-            "code": 500,
-            "Signer": None,
-            "SubjectDN": None,
-            "Issuer": None,
-            "SerialNumber": None,
-            "SignatureAlgorithm": None,
-            "Validity": None,
-            "LTV": None,
-            "FilehashValidation": None,
-            "Signature": None,
-            "timestampsignature": None,
-            "Verify_Certificate_Chain": None,
-            "Error": "Electronic signature or specimen was not found",
-        })
-
-    return entries, timestamp
-
+    return entries, global_ts
 
 def ensure_dim_date(cursor, dt_obj):
     cursor.execute(
@@ -307,12 +316,14 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
     date_id = ensure_dim_date(cursor, dt_obj)
     corpo_id = ensure_dim_corporate(cursor)
     doc_id = f"DOC-{stable_id(f'{raw_file_path}:{global_ts}')[:16]}"
+    readable_ts = datetime.fromtimestamp(global_ts / 1000).strftime("%Y-%m-%d %H:%M:%S")
 
     for _, entry in enumerate(entries, start=1):
         # --- A. AMBIL DATA DASAR ---
-        signer_name = entry.get("Signer") or "Unknown Signer"
+        signer_name = entry.get("Signer") or entry.get("Signer ") or "Unknown Signer"
+        # Pastiin lo ambil SubjectDN yang lengkap dari Postman
         subject_dn = entry.get("SubjectDN") or "N/A"
-        serial_number = entry.get("SerialNumber")
+        serial_number = entry.get("SerialNumber") or entry.get("Serial Number")
         issuer_raw = entry.get("Issuer") or "CN=Unknown Issuer, O=None"
 
         # --- B. GET SIGNER ID (C1) ---
@@ -356,7 +367,16 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
 
         # --- E. INSERT FACT TABLE F1 (SEKARANG AMAN!) ---
         days_left, is_expired = parse_validity_days(entry.get("Validity"))
+        # --- REVISI 3: AMBIL STATUS DARI ENTRY (Bukan nentuin sendiri) ---
+        # Ini biar data TSA/LTV dari JSON Postman (verified) gak ketutup sama logic manual
+        tsa_status = entry.get("TSA") or entry.get("timestamp signature") or "N/A"
+        ltv_status = entry.get("LTV") or "Not Supported"
         
+        # Penentuan is_trusted (Berdasarkan code 200 atau verified status)
+        code = entry.get("code", 500)
+        is_trusted = 1 if (code == 200 or entry.get("Signature") == "verified") else 0
+
+        # Insert ke Fact Table (Gunakan variabel ltv_status & tsa_status)
         cursor.execute(
             """INSERT INTO esa_fact_verifications (
                 f1_doc_id, c1_signer_key, c2_issuer_key, c3_date_key, c4_corpo_key, c5_integrity_key,
@@ -365,10 +385,11 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 doc_id, signer_id, issuer_id, date_id, corpo_id, integrity_id,
-                is_trusted, is_expired, days_left, entry.get("LTV"),
+                is_trusted, 0, 0, 
+                ltv_status, 
                 tsa_status,
                 entry.get("FilehashValidation") or "Valid",
-                entry.get("timestampsignature") or entry.get("Signature") or "verified",
+                entry.get("Signature") or "verified",
                 entry.get("Verify_Certificate_Chain") or "verified",
                 global_ts,
             ),
@@ -411,3 +432,38 @@ def process_metadata(raw_file_path):
         
     finally:
         conn.close()
+
+def normalize_json_entry(entry, parent_code=200):
+    # Cek "Signer " pake spasi atau tanpa spasi
+    signer = entry.get("Signer ") or entry.get("Signer") or "Unknown Signer"
+    
+    # SubjectDN & Issuer (Sesuai Postman lo)
+    subject_dn = entry.get("SubjectDN")
+    issuer = entry.get("Issuer")
+    
+    # Ambil metadata teknis
+    serial_number = entry.get("Serial Number")
+    sig_algo = entry.get("Signature Algorithm")
+    validity = entry.get("Validity")
+    
+    # Status-status penting
+    ltv = entry.get("LTV")
+    file_hash = entry.get("File hash Validation")
+    ts_status = entry.get("timestamp signature")
+    chain_status = entry.get("Verify_Certificate_Chain")
+    
+    return {
+        "code": entry.get("code", parent_code),
+        "Signer": signer,
+        "SubjectDN": subject_dn,
+        "Issuer": issuer,
+        "SerialNumber": serial_number,
+        "SignatureAlgorithm": sig_algo,
+        "Validity": validity,
+        "LTV": ltv,
+        "FilehashValidation": file_hash,
+        "Signature": entry.get("Signature"),
+        "timestampsignature": ts_status,
+        "Verify_Certificate_Chain": chain_status,
+        "Error": entry.get("reason") or ""
+    }

@@ -1,7 +1,9 @@
 # Amankan semua isi folder data
 data/
-# Tapi biarin folder staging tetep ada (isinya kosong)
 !data/staging/.gitkeep
+
+# --- PENTING: BIAR GAK JADI PERANG SAMA TIM FE ---
+ezsign-frontend/
 
 # Amankan environment & cache lebih menyeluruh
 .env

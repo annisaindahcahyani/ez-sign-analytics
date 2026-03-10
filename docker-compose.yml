@@ -1,17 +1,24 @@
 services:
-  # Service buat Python Engine (Lo, Ca!)
+  # --- Service Engine (Punya Lo) ---
   engine:
-    build:
-      context: ./ezsign-engine
-      dockerfile: Dockerfile
+    build: ./ezsign-engine
     container_name: ezsign_analytics_engine
     volumes:
       - ./ezsign-engine:/app
-      - ./data:/data # Shared Volume
+      - ./data:/data
     environment:
       - STAGING_PATH=/data/staging
       - PYTHONUNBUFFERED=1
       - DATABASE_PATH=/data/database.sqlite
-      - CORPORATE_CODE=ezsign
-      - CORPORATE_NAME=PT Solusi Identitas Global Net
     restart: always
+
+  # --- Service Frontend (Baru Lo Clone!) ---
+  frontend:
+    build: ./ezsign-frontend
+    container_name: ezsign_analytics_frontend
+    ports:
+      - "3000:3000" # Biar bisa dibuka di localhost:3000
+    volumes:
+      - ./data:/app/data # Biar FE bisa titip file ke folder staging di 'data'
+    depends_on:
+      - engine

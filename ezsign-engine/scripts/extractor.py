@@ -409,10 +409,9 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
         )
         integrity_id = cursor.lastrowid
 
-        # --- E. INSERT FACT TABLE F1 (SEKARANG AMAN!) ---
+
+        # --- E. INSERT FACT TABLE F1 (PASTIKAN MENYATU DENGAN FOR LOOP) ---
         days_left, is_expired = parse_validity_days(entry.get("Validity"))
-        # --- REVISI 3: AMBIL STATUS DARI ENTRY (Bukan nentuin sendiri) ---
-        # Ini biar data TSA/LTV dari JSON Postman (verified) gak ketutup sama logic manual
         tsa_status = entry.get("TSA") or entry.get("timestamp signature") or "N/A"
         ltv_status = entry.get("LTV") or "Not Supported"
         
@@ -420,7 +419,7 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
         code = entry.get("code", 500)
         is_trusted = 1 if (code == 200 or entry.get("Signature") == "verified") else 0
 
-        # Insert ke Fact Table (Gunakan variabel ltv_status & tsa_status)
+        # PENTING: Cursor execute ini harus sejajar sama 'days_left' di atas!
         cursor.execute(
             """INSERT INTO esa_fact_verifications (
                 f1_doc_id, c1_signer_key, c2_issuer_key, c3_date_key, c4_corpo_key, c5_integrity_key,
@@ -435,11 +434,9 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
                 entry.get("FilehashValidation") or "Valid",
                 entry.get("Signature") or "verified",
                 entry.get("Verify_Certificate_Chain") or "verified",
-                global_ts,
+                readable_ts,  # <--- SUDAH BENAR PAKAI READABLE_TS! 🏆
             ),
         )
-
-
 def process_metadata(raw_file_path):
     file_ext = os.path.splitext(raw_file_path)[1].lower()
 

@@ -1,0 +1,14 @@
+# Biar Git lo ga pusing ada Git di dalem Git (Nested Git)
+ezsign-frontend/.git
+
+# Biar rahasia dapur ga bocor ke GitHub
+ezsign-engine/config/.env
+.env
+
+# Biar sampah Python ga ikut-ikutan
+__pycache__/
+*.pyc
+
+# Biar database lokal dan PDF titipan ga masuk GitHub
+data/database.sqlite
+data/staging/*

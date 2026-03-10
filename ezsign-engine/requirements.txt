@@ -16,3 +16,9 @@ flask-cors
 fastapi
 uvicorn
 python-multipart
+
+
+streamlit
+plotly
+sqlite3
+8380ba2f3e35e81e40a240a79279a43ac5fbd1b4

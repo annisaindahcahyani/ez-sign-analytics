@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # --- 1. SERVICE ENGINE (SI SATPAM DATA) ---
+  # --- 1. ENGINE (SATPAM DATA) ---
   engine:
     build: ./ezsign-engine
     container_name: ezsign_analytics_engine
@@ -14,8 +12,7 @@ services:
       - DATABASE_PATH=/data/database.sqlite
     restart: always
 
-  # --- 2. SERVICE DASHBOARD (SI DASHBOARD STREAMLIT) ---
-  # Menggunakan Dockerfile yang ada di dalam folder ezsign-engine/dashboard
+  # --- 2. DASHBOARD (STREAMLIT) ---
   dashboard:
     build: ./ezsign-engine/dashboard
     container_name: ezsign_analytics_dashboard
@@ -23,12 +20,12 @@ services:
       - "8501:8501"
     volumes:
       - ./ezsign-engine/dashboard:/app
-      - ./data:/data  # Jembatan buat baca database.sqlite
+      - ./data:/data
     depends_on:
       - engine
     restart: always
 
-  # --- 3. SERVICE FRONTEND (SI WAJAH PUBLIK) ---
+  # --- 3. FRONTEND (WEB) ---
   frontend:
     build: ./ezsign-frontend
     container_name: ezsign_analytics_frontend
@@ -36,9 +33,9 @@ services:
       - "3000:3000"
     volumes:
       - ./ezsign-frontend:/app
-      - /app/node_modules  # Zonasi aman biar gak bentrok library laptop vs docker
-      - /app/.next        # Biar cache development gak bikin berat
-      - ./data:/app/data   # Jembatan buat titip file PDF ke staging
+      - /app/node_modules
+      - /app/.next
+      - ./data:/app/data
     depends_on:
       - engine
     restart: always

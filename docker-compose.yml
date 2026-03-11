@@ -6,7 +6,7 @@ services:
     build: ./ezsign-engine
     container_name: ezsign_analytics_engine
     ports:
-      - "0.0.0.0:3001:8000" # Biar bisa diakses di localhost:3001
+      - "0.0.0.0:3001:8000" # Biar API bisa diakses dari localhost:3001
     volumes:
       - ./ezsign-engine:/app
       - ./data:/data
@@ -37,7 +37,6 @@ services:
     ports:
       - "0.0.0.0:3000:3000" # Biar bisa dibuka di localhost:3000
       - "3000:3000"
-      - 8380ba2f3e35e81e40a240a79279a43ac5fbd1b4
     volumes:
       - ./ezsign-frontend:/app
       - /app/node_modules  # Zonasi aman biar gak bentrok library laptop vs docker

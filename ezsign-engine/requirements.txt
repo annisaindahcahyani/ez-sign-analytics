@@ -1,6 +1,5 @@
 # --- Database & Data Processing ---
 sqlalchemy    # Buat koneksi Python ke SQLite (ORM/Engine)
-pandas        # Buat manipulasi data tabel biar sat-set
 
 # --- File System & Automation ---
 watchdog      # Si 'Satpam' buat deteksi file PDF baru secara real-time
@@ -13,7 +12,13 @@ asn1crypto    # Parse konten PKCS7/X.509 sertifikat digital
 python-dotenv
 flask
 flask-cors
+fastapi
+uvicorn
+python-multipart
 
+<<<<<<< HEAD
 # --- Dashboard ---
 streamlit
 plotly
+=======
+>>>>>>> 87d5974bf27bb15638238d4eb5d85b77f5910148

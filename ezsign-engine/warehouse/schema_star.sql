@@ -3,13 +3,15 @@
 -- Sesuai Draw.io Page 1 & 9 + JSON Real-Time
 -- =============================================
 
--- 1. Dimensi Signer (C1): Profile Penandatangan
+-- 1. Dimensi Signer (C1): Sekarang sudah dipecah!
 CREATE TABLE esa_dim_signer_c1 (
     c1_signer_key INTEGER PRIMARY KEY AUTOINCREMENT,
-    c1_signer_name TEXT,
-    c1_subject_dn TEXT,
-    c1_serial_number TEXT UNIQUE, -- Serial Number unik dari JSON
-    c1_sha1_fingerprint TEXT -- Placeholder: Buat data Sidik Jari SHA-1
+    c1_full_subject_dn TEXT,       -- Contoh: C=ID, O=Universitas Indonesia, CN=Agus...
+    c1_common_name TEXT,           -- Nama Penandatangan (CN)
+    c1_organization TEXT,          -- Instansi (O)
+    c1_country TEXT,               -- Negara (C)
+    c1_serial_number TEXT UNIQUE, 
+    c1_sha1_fingerprint TEXT 
 );
 
 -- 2. Dimensi Issuer (C2): CA Provider

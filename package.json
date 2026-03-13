@@ -9,9 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "sql.js": "^1.14.1",
+    "sqlite": "^5.1.1"
   }
 }

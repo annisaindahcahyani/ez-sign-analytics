@@ -1,24 +1,29 @@
-# --- Database & Data Processing ---
-sqlalchemy    # Buat koneksi Python ke SQLite (ORM/Engine)
+# --- [1] DATABASE & CORE PROCESSING ---
+# Mengolah data dalam bentuk tabel dan koneksi ke database SQLite
+sqlalchemy   # Translator antara Python dan SQL Database
+pandas       # Raja pengolah tabel data (DataFrame) untuk rekapitulasi
 
-# --- File System & Automation ---
-watchdog      # Si 'Satpam' buat deteksi file PDF baru secara real-time
+# --- [2] FILE SYSTEM & AUTOMATION ---
+# Menjaga folder agar tetap responsif terhadap file baru
+watchdog     # 'Satpam' yang mendeteksi PDF baru masuk ke folder staging
 
-# --- PDF Processing ---
-pymupdf       # Si 'Otak' buat bedah sertifikat digital di dalem PDF
-pikepdf       # Extract signature bytes dari struktur PDF AcroForm
-asn1crypto    # Parse konten PKCS7/X.509 sertifikat digital
+# --- [3] PDF & SECURITY EXTRACTION ---
+# Otak utama untuk membedah TTE (Tanda Tangan Elektronik)
+pymupdf      # Membuka dan membaca struktur dasar dokumen PDF
+pikepdf      # Mengekstrak data sertifikat digital (bytes) dari PDF
+asn1crypto   # Membedah isi sertifikat untuk cek Issuer dan Masa Berlaku
 
-python-dotenv
-flask
-flask-cors
-fastapi
-uvicorn
-python-multipart
+# --- [4] API & BACKEND INFRASTRUCTURE ---
+# Jembatan komunikasi data antar sistem
+python-dotenv  # Mengamankan konfigurasi sensitif (Secret Keys/Paths)
+fastapi        # Framework API kasta tinggi yang super kenceng
+uvicorn        # Server untuk menjalankan aplikasi FastAPI
+python-multipart # Library pendukung biar sistem bisa nerima upload file
+flask          # Framework tambahan untuk handling routing tertentu
+flask-cors     # Izin akses biar Dashboard gak diblokir pas minta data
 
-<<<<<<< HEAD
-# --- Dashboard ---
-streamlit
-plotly
-=======
->>>>>>> 87d5974bf27bb15638238d4eb5d85b77f5910148
+# --- [5] DATA VISUALIZATION & DASHBOARD ---
+# Komponen untuk tampilan antarmuka yang cantik
+streamlit    # Framework utama dashboard interaktif
+plotly       # Membuat grafik (Pie Chart/Trend) yang bisa di-hover
+requests     # Biar Dashboard bisa 'nelfon' API Engine buat ambil data

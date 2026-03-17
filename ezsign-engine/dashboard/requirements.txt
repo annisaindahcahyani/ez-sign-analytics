@@ -1,8 +1,0 @@
-streamlit
-<<<<<<< HEAD
-pandas
-plotly
-=======
-plotly
-pandas
->>>>>>> 87d5974bf27bb15638238d4eb5d85b77f5910148

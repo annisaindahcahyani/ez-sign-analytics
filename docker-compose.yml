@@ -14,28 +14,15 @@ services:
 
   # --- 2. DASHBOARD (STREAMLIT) ---
   dashboard:
-    build: ./ezsign-engine/dashboard
+    build:
+      context: ./ezsign-engine
+      dockerfile: dashboard/Dockerfile
     container_name: ezsign_analytics_dashboard
     ports:
       - "8501:8501"
     volumes:
       - ./ezsign-engine/dashboard:/app
       - ./data:/data
-    depends_on:
-      - engine
-    restart: always
-
-  # --- 3. FRONTEND (WEB) ---
-  frontend:
-    build: ./ezsign-frontend
-    container_name: ezsign_analytics_frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./ezsign-frontend:/app
-      - /app/node_modules
-      - /app/.next
-      - ./data:/app/data
     depends_on:
       - engine
     restart: always

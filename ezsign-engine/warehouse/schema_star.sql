@@ -1,31 +1,33 @@
 -- =============================================
 -- REBUILD TOTAL: STAR SCHEMA EZSIGN ANALYTICS
--- Sesuai Draw.io Page 1 & 9 + JSON Real-Time
+-- Version: 2.0 (Updated: Office & UI Figma Requirements)
 -- =============================================
 
--- 1. Dimensi Signer (C1): Sekarang sudah dipecah!
+-- 1. Dimensi Signer (C1): Informasi Identitas & Sertifikat Digital
 CREATE TABLE esa_dim_signer_c1 (
     c1_signer_key INTEGER PRIMARY KEY AUTOINCREMENT,
-    c1_full_subject_dn TEXT,       -- Contoh: C=ID, O=Universitas Indonesia, CN=Agus...
-    c1_common_name TEXT,           -- Nama Penandatangan (CN)
-    c1_organization TEXT,          -- Instansi (O)
-    c1_country TEXT,               -- Negara (C)
-    c1_serial_number TEXT UNIQUE, 
-    c1_sha1_fingerprint TEXT 
+    c1_full_subject_dn TEXT,       -- Contoh: CN=TARADIVA NOVIA, O=PT SIG, C=ID
+    c1_common_name TEXT,           -- Nama Penandatangan (Pemberi Tanda Tangan)
+    c1_organization TEXT,          -- Nama Instansi/Organisasi
+    c1_country TEXT,               -- Kode Negara (e.g., ID)
+    c1_serial_number TEXT UNIQUE,  -- Nomor unik CA (Identitas Utama)
+    c1_sha1_fingerprint TEXT,      -- Sidik Jari Digital Sertifikat (RILL KOMDIGI)
+    c1_valid_from TEXT,            -- Tanggal Mulai Sertifikat (Timestamp)
+    c1_valid_until TEXT            -- Tanggal Berakhir Sertifikat (Timestamp)
 );
 
--- 2. Dimensi Issuer (C2): CA Provider
+-- 2. Dimensi Issuer (C2): CA Provider (Penerbit Sertifikat)
 CREATE TABLE esa_dim_issuer_c2 (
     c2_issuer_key INTEGER PRIMARY KEY AUTOINCREMENT,
-    c2_full_distinguished_name TEXT, -- Simpan aslinya buat audit
-    c2_common_name TEXT,            -- Contoh: BSRE CA DS G1
-    c2_organization TEXT,           -- Contoh: Badan Siber dan Sandi Negara
-    c2_country TEXT,                -- Contoh: ID
-    c2_sig_algo TEXT,
-    c2_is_berinduk INTEGER DEFAULT 1
+    c2_full_distinguished_name TEXT, -- Identitas Lengkap CA (Issuer DN)
+    c2_common_name TEXT,             -- Nama CA (e.g., e Sign CA Class 1)
+    c2_organization TEXT,            -- Organisasi CA
+    c2_country TEXT,                 -- Negara CA
+    c2_sig_algo TEXT,                -- Signature Algorithm (Contoh: SHA256withRSA)
+    c2_is_berinduk INTEGER DEFAULT 1 -- Status Sertifikat Berinduk Kominfo
 );
 
--- 3. Dimensi Date/Time (C3): Analisis Tren
+-- 3. Dimensi Date/Time (C3): Analisis Tren Waktu Ingest
 CREATE TABLE esa_dim_date_c3 (
     c3_date_key INTEGER PRIMARY KEY AUTOINCREMENT,
     c3_full_date DATE,
@@ -35,43 +37,43 @@ CREATE TABLE esa_dim_date_c3 (
     c3_hour INTEGER
 );
 
--- 4. Dimensi Corporate (C4): Mapping Vendor
+-- 4. Dimensi Corporate (C4): Mapping Tenant/Vendor
 CREATE TABLE esa_dim_corporate_c4 (
     c4_corpo_key INTEGER PRIMARY KEY AUTOINCREMENT,
-    c4_corpo_code TEXT,
-    c4_corpo_name TEXT
+    c4_corpo_code TEXT,              -- Kode Perusahaan (e.g., SIG)
+    c4_corpo_name TEXT               -- Nama Lengkap Perusahaan
 );
 
--- 5. Dimensi Integrity (C5): Status & Error
+-- 5. Dimensi Integrity (C5): Detail Keaslian & Bukti Fisik
 CREATE TABLE esa_dim_integrity_c5 (
     c5_integrity_key INTEGER PRIMARY KEY AUTOINCREMENT,
-    c5_status_code INTEGER,   -- Diambil dari "code" (e.g., 200, 1003)
-    c5_status_type TEXT,      -- Trusted / Not Trusted
-    c5_integrity_desc TEXT,   -- Detail dari "File hash Validation"
-    c5_error_message TEXT,     -- Pesan error Java yang panjang itu
-    c5_reason TEXT,           -- Placeholder: Alasan TTE (UI Figma)
-    c5_location TEXT,         -- Placeholder: Lokasi TTE (UI Figma)
-    c5_local_timestamp TEXT   -- Placeholder: Stempel Waktu (UI Figma)
+    c5_status_code INTEGER,          -- Status HTTP/API (e.g., 200)
+    c5_status_type TEXT,             -- Trusted / Not Trusted
+    c5_integrity_desc TEXT,          -- Deskripsi Hash (e.g., File hash Valid)
+    c5_error_message TEXT,           -- Pesan error jika verifikasi gagal
+    c5_reason TEXT,                  -- Alasan Signature (Dari PDF Metadata)
+    c5_location TEXT,                -- Lokasi Signer (Dari PDF Metadata)
+    c5_local_timestamp TEXT          -- Stempel Waktu (Waktu terkunci di dokumen)
 );
 
--- 6. Fact Table (F1): Central Analytics
+-- 6. Fact Table (F1): Pusat Analisis (Fact Verification)
 CREATE TABLE esa_fact_verifications (
     f1_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    f1_doc_id TEXT,           -- Metadata file
+    f1_doc_id TEXT,                  -- Nama File / Unique Document ID
     c1_signer_key INTEGER,
     c2_issuer_key INTEGER,
     c3_date_key INTEGER,
     c4_corpo_key INTEGER,
     c5_integrity_key INTEGER,
-    f1_is_trusted INTEGER,    -- 1 (verified), 0 (failed)
-    f1_is_expired INTEGER,    -- Hasil logic Python dari "Validity"
-    f1_validity_days INTEGER, -- Sisa hari masa aktif
-    f1_ltv_status TEXT,       -- Diambil dari "LTV"
-    f1_tsa_status TEXT,       -- Placeholder: Info TSA (UI Figma)
-    f1_hash_status TEXT,      -- Diambil dari "File hash Validation"
-    f1_sig_status TEXT,       -- Diambil dari "timestamp signature"
-    f1_chain_status TEXT,     -- Diambil dari "Verify_Certificate_Chain"
-    f1_signing_time BIGINT,   -- Unix Epoch dari API
+    f1_is_trusted INTEGER,           -- Flag Biner (1=Verified, 0=Failed)
+    f1_is_expired INTEGER,           -- Status Ekspirasi (1=Expired, 0=Active)
+    f1_validity_days INTEGER,        -- Sisa Masa Aktif (Countdown Hari)
+    f1_ltv_status TEXT,              -- Status LTV (Long Term Validation)
+    f1_tsa_status TEXT,              -- Info TSA Service (e.g., eSign TSA)
+    f1_hash_status TEXT,             -- Status Validasi Hash Dokumen
+    f1_sig_status TEXT,              -- Status Tanda Tangan Digital
+    f1_chain_status TEXT,            -- Status Certificate Chain (Root CA)
+    f1_signing_time BIGINT,          -- Waktu Penandatangan (Unix Epoch dari User)
     f1_ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (c1_signer_key) REFERENCES esa_dim_signer_c1(c1_signer_key),
     FOREIGN KEY (c2_issuer_key) REFERENCES esa_dim_issuer_c2(c2_issuer_key),

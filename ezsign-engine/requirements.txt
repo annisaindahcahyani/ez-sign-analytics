@@ -27,3 +27,7 @@ flask-cors     # Izin akses biar Dashboard gak diblokir pas minta data
 streamlit    # Framework utama dashboard interaktif
 plotly       # Membuat grafik (Pie Chart/Trend) yang bisa di-hover
 requests     # Biar Dashboard bisa 'nelfon' API Engine buat ambil data
+
+# --- [6] WEB INTELLIGENCE & SCRAPING (PRE-AUDIT W12) ---
+selenium
+webdriver-manager

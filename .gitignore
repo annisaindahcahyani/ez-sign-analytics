@@ -2,18 +2,20 @@
 data/
 !data/staging/.gitkeep
 
-# --- PENTING: BIAR GAK JADI PERANG SAMA TIM FE ---
-ezsign-frontend/
-
 # Amankan environment & cache lebih menyeluruh
 .env
 *.env
 __pycache__/
 *.pyc
-.venv/
-venv/
-node_modules
-.next/
 out/
 build/
 .turbo/
+
+# --- OPTIMASI REPOSITORI & KEAMANAN DATA ---
+node_modules/
+.next/
+.venv/
+venv/
+
+# ISOLASI PROYEK UNTUK KOLABORASI TIM
+ezsign-frontend/

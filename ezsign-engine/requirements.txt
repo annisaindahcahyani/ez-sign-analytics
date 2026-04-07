@@ -1,33 +1,41 @@
-# --- [1] DATABASE & CORE PROCESSING ---
-# Mengolah data dalam bentuk tabel dan koneksi ke database SQLite
-sqlalchemy   # Translator antara Python dan SQL Database
-pandas       # Raja pengolah tabel data (DataFrame) untuk rekapitulasi
+# =================================================================
+# 📦 EZSIGN ANALYTICS ENGINE - DEPENDENCIES LIST
+# =================================================================
+# File ini mendefinisikan seluruh library Python yang dibutuhkan.
+# Gunakan: pip install -r requirements.txt
+# =================================================================
 
-# --- [2] FILE SYSTEM & AUTOMATION ---
-# Menjaga folder agar tetap responsif terhadap file baru
-watchdog     # 'Satpam' yang mendeteksi PDF baru masuk ke folder staging
+# --- [1] DATABASE & CORE PROCESSING (The Brain) ---
+# Mengelola aliran data dari mentah menjadi tabel terstruktur (Star Schema).
+sqlalchemy   # ORM: Translator antara logika Python dan SQL Database SQLite.
+pandas       # Data Wrangling: Raja pengolah tabel (DataFrame) untuk agregasi & rekapitulasi.
 
-# --- [3] PDF & SECURITY EXTRACTION ---
-# Otak utama untuk membedah TTE (Tanda Tangan Elektronik)
-pymupdf      # Membuka dan membaca struktur dasar dokumen PDF
-pikepdf      # Mengekstrak data sertifikat digital (bytes) dari PDF
-asn1crypto   # Membedah isi sertifikat untuk cek Issuer dan Masa Berlaku
+# --- [2] FILE SYSTEM & AUTOMATION (The Watcher) ---
+# Mekanisme otomasi untuk mendeteksi data baru secara real-time.
+watchdog     # 'Satpam' Folder: Mendeteksi secara otomatis saat ada PDF baru masuk ke folder staging.
 
-# --- [4] API & BACKEND INFRASTRUCTURE ---
-# Jembatan komunikasi data antar sistem
-python-dotenv  # Mengamankan konfigurasi sensitif (Secret Keys/Paths)
-fastapi        # Framework API kasta tinggi yang super kenceng
-uvicorn        # Server untuk menjalankan aplikasi FastAPI
-python-multipart # Library pendukung biar sistem bisa nerima upload file
-flask          # Framework tambahan untuk handling routing tertentu
-flask-cors     # Izin akses biar Dashboard gak diblokir pas minta data
+# --- [3] PDF & SECURITY EXTRACTION (The Forensic Tools) ---
+# Tools utama untuk membedah Tanda Tangan Elektronik (TTE) & Sertifikat Digital.
+pymupdf      # PDF Engine: Membuka dan membaca struktur dasar dokumen PDF secara cepat.
+pikepdf      # Crypto-Extractor: Mengambil data sertifikat digital (bytes) dari dalam PDF.
+asn1crypto   # Certificate Parser: Membedah isi sertifikat untuk validasi Issuer, SN, dan Masa Berlaku.
 
-# --- [5] DATA VISUALIZATION & DASHBOARD ---
-# Komponen untuk tampilan antarmuka yang cantik
-streamlit    # Framework utama dashboard interaktif
-plotly       # Membuat grafik (Pie Chart/Trend) yang bisa di-hover
-requests     # Biar Dashboard bisa 'nelfon' API Engine buat ambil data
+# --- [4] API & BACKEND INFRASTRUCTURE (The Bridge) ---
+# Infrastruktur komunikasi data antar modul (Engine <-> Frontend).
+python-dotenv    # Security: Mengamankan konfigurasi sensitif (Secret Keys/Paths) dari file .env.
+fastapi          # Modern Web Framework: Engine API berperforma tinggi (High-Speed Ingestion).
+uvicorn          # ASGI Server: Mesin untuk menjalankan aplikasi FastAPI.
+python-multipart # File Handler: Pendukung agar sistem bisa menerima upload file via API.
+flask            # Micro Framework: Library tambahan untuk penanganan routing tertentu.
+flask-cors       # Cross-Origin: Memberikan izin akses agar Dashboard tidak diblokir saat request data.
 
-# --- [6] WEB INTELLIGENCE & SCRAPING (PRE-AUDIT W12) ---
-selenium
-webdriver-manager
+# --- [5] DATA VISUALIZATION & DASHBOARD (The Visualizer) ---
+# Komponen untuk membangun antarmuka analisis yang interaktif.
+streamlit    # Dashboard Framework: Framework utama untuk UI Dashboard EzSign.
+plotly       # Interactive Charts: Membuat grafik (Pie Chart/Trend) yang responsif & bisa di-hover.
+requests     # HTTP Client: Jembatan agar Dashboard bisa 'memanggil' API Engine untuk fetch data.
+
+# --- [6] WEB INTELLIGENCE & SCRAPING (Pre-Audit W12) ---
+# Tools untuk otomasi browser dan validasi data eksternal (PSrE Check).
+selenium          # Browser Automation: Menggerakkan browser otomatis untuk validasi web.
+webdriver-manager # Driver Utility: Mengelola driver browser agar selalu up-to-date secara otomatis.

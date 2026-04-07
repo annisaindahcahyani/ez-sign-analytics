@@ -1,31 +1,48 @@
+
+# ==========================================
+  # 🕵️‍♂️ 1. ENGINE SERVICE (The Data Guard / Satpam Data)
+  # ==========================================
+  # Tugas: Melakukan ETL (Extract, Transform, Load), Ingestion, 
+  # dan pemrosesan data mentah menjadi Star Schema secara otomatis.
 services:
   # --- 1. ENGINE (SATPAM DATA) ---
   engine:
     build: ./ezsign-engine
     container_name: ezsign_analytics_engine
+    # Hot-reloading: Sinkronisasi kodingan lokal ke dalam container
     volumes:
       - ./ezsign-engine:/app
+    # Data Persistence: Mastiin database SQLite & Staging tetap aman meski container di-restart
       - ./data:/data
     environment:
       - STAGING_PATH=/data/staging
-      - PYTHONUNBUFFERED=1
+      - PYTHONUNBUFFERED=1 # Biar log Python langsung muncul di terminal (Real-time monitoring)
       - DATABASE_PATH=/data/database.sqlite
-    restart: always
+    restart: always # Auto-healing: Nyala otomatis kalau crash atau laptop restart
 
-  # --- 2. DASHBOARD (STREAMLIT) ---
+# ==========================================
+  # 📊 2. DASHBOARD SERVICE (The Visualizer / Streamlit)
+  # ==========================================
+  # Tugas: Interface utama untuk User/Mentor buat liat hasil analisis 
+  # data verifikasi EzSign secara interaktif.
   dashboard:
     build:
       context: ./ezsign-engine
       dockerfile: dashboard/Dockerfile
     container_name: ezsign_analytics_dashboard
     ports:
-      - "8501:8501"
+      - "8501:8501" # Akses Dashboard via http://localhost:8501
     volumes:
       - ./ezsign-engine/dashboard:/app
-      - ./data:/data
+      - ./data:/data # Share volume yang sama biar bisa baca DB yang di-update Engine
     depends_on:
-      - engine
+      - engine # Security Check: Jangan nyalain dashboard kalau mesin datanya belum siap
     restart: always
 
+# ==========================================
+# 💾 SHARED VOLUMES (The Storage)
+# ==========================================
+# Mendefinisikan persistent storage agar data database.sqlite tidak hilang
+# saat container dihancurkan (docker-compose down).
 volumes:
   data:

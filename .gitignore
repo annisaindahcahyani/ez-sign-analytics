@@ -1,21 +1,44 @@
+# ==========================================
+# 🛡️ DATA PRIVACY & STORAGE (UU PDP Compliance)
+# ==========================================
+# Isolasi folder data agar database SQLite lokal tidak ikut ter-push ke GitHub.
+# Hal ini untuk mencegah kebocoran data transaksi riil perusahaan.
 # Amankan semua isi folder data
 data/
+
+# Kecualikan folder staging agar struktur folder tetap terjaga di Git.
 !data/staging/.gitkeep
 
-# Amankan environment & cache lebih menyeluruh
+# ==========================================
+# 🔑 SECURITY & ENVIRONMENT VARIABLES
+# ==========================================
+# Mengamankan file konfigurasi sensitif (API Keys, Database Credentials).
+# WAJIB: Jangan pernah menghapus baris ini agar rahasia perusahaan tetap aman.
 .env
 *.env
-__pycache__/
-*.pyc
-out/
-build/
-.turbo/
 
-# --- OPTIMASI REPOSITORI & KEAMANAN DATA ---
+# ==========================================
+# 📦 DEPENDENCIES & VIRTUAL ENVIRONMENTS
+# ==========================================
+# Folder library yang sizenya giga-an, tidak perlu masuk Git (cukup install via pnpm/pip).
 node_modules/
-.next/
 .venv/
 venv/
 
-# ISOLASI PROYEK UNTUK KOLABORASI TIM
+# ==========================================
+# ⚡ BUILD OUTPUTS & CACHE (Performance)
+# ==========================================
+# Menghapus 'sampah' kompilasi agar repo tetap ringan dan bebas conflict.
+.next/
+.turbo/
+out/
+build/
+__pycache__/
+*.pyc
+
+# ==========================================
+# 🚀 PROJECT ISOLATION (Collaboration Strategy)
+# ==========================================
+# Memisahkan repositori Frontend jika dikembangkan dalam sub-folder terpisah.
+# Hal ini untuk menghindari 'Nested Git' yang membingungkan saat push/pull.
 ezsign-frontend/

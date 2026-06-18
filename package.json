@@ -1,6 +1,7 @@
 {
-  "name": "ez-sign-analytics",
-  "version": "0.1.0",
+  "name": "ez-sign-analytics-frontend",
+  "version": "1.0.0",
+  "description": "Frontend Ingestion Gateway & Audit Interface for EzSign Analytics",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3001",
@@ -9,10 +10,12 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
+    "next": "15.0.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "sql.js": "^1.14.1",
     "sqlite": "^5.1.1"
-  }
+  },
+  "author": "EzSign Analytics Team",
+  "license": "MIT"
 }

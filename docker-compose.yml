@@ -1,48 +1,68 @@
+# =============================================================================
+# 🐳 SERVICE ORCHESTRATION: EZSIGN ANALYTICS ENGINE & DASHBOARD
+# =============================================================================
+# 📌 CONFIGURATION : Multi-Container Docker Service Orchestrator
+# 📅 UPDATE        : 5 Juni 2026
+# 🛡️ OBJECTIVE     : Orkestrasi layanan backend (Engine) dan antarmuka (Dashboard)
+# =============================================================================
 
-# ==========================================
-  # 🕵️‍♂️ 1. ENGINE SERVICE (The Data Guard / Satpam Data)
-  # ==========================================
-  # Tugas: Melakukan ETL (Extract, Transform, Load), Ingestion, 
-  # dan pemrosesan data mentah menjadi Star Schema secara otomatis.
+version: '3.8'
+
 services:
-  # --- 1. ENGINE (SATPAM DATA) ---
+  # --- 1. ENGINE SERVICE (Data Ingestion & REST API Gateway Layer) ---
+  # Bertanggung jawab atas proses ETL, ekstraksi metadata kriptografi ASN.1, 
+  # dan sinkronisasi data transaksi verifikasi ke dalam arsitektur Star Schema.
   engine:
     build: ./ezsign-engine
     container_name: ezsign_analytics_engine
-    # Hot-reloading: Sinkronisasi kodingan lokal ke dalam container
+    
+    # Eksposur gerbang REST API FastAPI agar dapat di-hit secara asinkron oleh Next.js/Frontend
+    ports:
+      - "8000:8000"
+    
+    # Sinkronisasi direktori lokal ke dalam kontainer untuk pengembangan aktif (Hot-Reload Deployment)
     volumes:
       - ./ezsign-engine:/app
-    # Data Persistence: Mastiin database SQLite & Staging tetap aman meski container di-restart
+      # Penyimpanan persisten murni (Shared Persistent Bind Mount) untuk SQLite & direktori staging
       - ./data:/data
+    
+    # Sinkronisasi konfigurasi environment terpusat agar kebal dari kebutaan konfigurasi runtime
     environment:
-      - STAGING_PATH=/data/staging
-      - PYTHONUNBUFFERED=1 # Biar log Python langsung muncul di terminal (Real-time monitoring)
+      - CORPORATE_CODE=ezsign
+      - CORPORATE_NAME=PT Solusi Identitas Global Net
       - DATABASE_PATH=/data/database.sqlite
-    restart: always # Auto-healing: Nyala otomatis kalau crash atau laptop restart
+      - STAGING_PATH=/data/staging
+      - INTEL_DATASET_PATH=/data/staging/intel_dataset.csv
+      - PSRE_FILES_DIR=/data/staging/psre_files
+      - PYTHONUNBUFFERED=1 # Mengaktifkan output log stream real-time pada terminal Docker logs
+      
+    restart: always
 
-# ==========================================
-  # 📊 2. DASHBOARD SERVICE (The Visualizer / Streamlit)
-  # ==========================================
-  # Tugas: Interface utama untuk User/Mentor buat liat hasil analisis 
-  # data verifikasi EzSign secara interaktif.
+  # --- 2. DASHBOARD SERVICE (OLAP Analytics Visualization Interface) ---
+  # Menyediakan antarmuka interaktif berbasis Streamlit untuk monitoring
+  # tingkat kepercayaan dokumen (SAW/WP MADM Score) dan intelijen pasar kompetitor.
   dashboard:
     build:
       context: ./ezsign-engine
       dockerfile: dashboard/Dockerfile
     container_name: ezsign_analytics_dashboard
+    
     ports:
-      - "8501:8501" # Akses Dashboard via http://localhost:8501
+      - "8501:8501" # Eksposur layanan dashboard UI melalui port forwarding 8501
+    
     volumes:
       - ./ezsign-engine/dashboard:/app
-      - ./data:/data # Share volume yang sama biar bisa baca DB yang di-update Engine
+      - ./data:/data # Berbagi akses volume storage yang sama untuk pembacaan data warehouse secara real-time
+      - ./.streamlit:/app/.streamlit  # Tambahin baris ini
+      
+    environment:
+      - DATABASE_PATH=/data/database.sqlite
+      - STAGING_PATH=/data/staging
+      - INTEL_DATASET_PATH=/data/staging/intel_dataset.csv
+      - PSRE_FILES_DIR=/data/staging/psre_files
+      
+    # Dependency Check Control: Menjamin backend engine hidup sempurna sebelum dashboard UI di-render
     depends_on:
-      - engine # Security Check: Jangan nyalain dashboard kalau mesin datanya belum siap
+      - engine
+      
     restart: always
-
-# ==========================================
-# 💾 SHARED VOLUMES (The Storage)
-# ==========================================
-# Mendefinisikan persistent storage agar data database.sqlite tidak hilang
-# saat container dihancurkan (docker-compose down).
-volumes:
-  data:

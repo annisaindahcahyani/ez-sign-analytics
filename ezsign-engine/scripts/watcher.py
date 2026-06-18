@@ -1,83 +1,132 @@
 # =============================================================================
-# 🛠️ MODULE: EZSIGN AUTOMATED FILE WATCHER (THE "SATPAM" ENGINE)
+# 📡 MODULE: AUTOMATED FILE INGESTION WATCHER (DAEMON PROCESS)
 # =============================================================================
-# TUGAS UTAMA:
-# 1. Monitoring Real-time: Memantau folder staging secara terus-menerus.
-# 2. Automated Ingestion: Mendeteksi PDF baru dan memicu proses ekstraksi secara otomatis.
-# 3. Stability Guard: Menangani issue "Race Condition" saat file sedang di-copy.
-
-# ALASAN TEKNIS (FOR DEVELOPERS):
-# - Mengapa PollingObserver? Docker/Network Drive sering gagal mengirim event 'inotify'
-#   native. Polling memastikan deteksi tetap jalan di environment container.
-# - Mengapa Sleep 2s? Mencegah 'File Permission Error' karena library mencoba membaca
-#   PDF yang proses copy-nya belum selesai 100%.
-
-# ALUR KERJA:
-# File Masuk -> Trigger event_handler -> Validasi Ekstensi -> Wait 2s -> Extractor
+# 📌 CONFIGURATION : Staging Area Monitoring System
+# 📅 UPDATE        : 5 Juni 2026
+# 🔬 CORE ENGINE   : Watchdog PollingObserver
+# 🛡️ OBJECTIVE     : Mendeteksi masuknya berkas baru (PDF/JSON) dan memicu 
+#                    eksekusi pipeline ekstraksi metadata secara otomatis.
+# =============================================================================
+# 🗺️ DOKUMEN TATA KERJA FUNGSIONAL PENGEMBANG (FOR NEXT DEVELOPER):
+#
+# 1. ARSITEKTUR POLLING OBSERVER:
+#    Skrip ini tidak menggunakan observer native ('inotify'), melainkan mengadopsi 
+#    PollingObserver. Hal ini dikarenakan lingkungan terisolasi seperti Docker Container 
+#    atau Network Drive seringkali gagal mengirimkan sinyal perubahan berkas (file system events) 
+#    secara native ke lapisan kernel Linux. Polling menjamin deteksi tetap konsisten.
+#
+# 2. MITIGASI RACE CONDITION (I/O DELAY):
+#    Terdapat mekanisme penundaan eksekusi buatan (time.sleep(2)) setelah berkas baru 
+#    dideteksi. Fungsi ini memberikan jeda kritis agar proses transfer/penyalinan I/O 
+#    dari host menuju kontainer selesai dengan sempurna, mencegah munculnya galat 
+#    'File in Use' atau 'Corrupted Stream' saat proses ekstraksi berlangsung.
+#
+# 3. KETAHANAN SISTEM (FAULT TOLERANCE):
+#    Eksekusi modul ekstraktor (process_metadata) dibungkus dalam blok try-except absolut.
+#    Tujuannya agar Daemon Process ini tidak mengalami crash (berhenti beroperasi) 
+#    hanya karena menemukan satu berkas yang korup atau terenkripsi ganda.
 # =============================================================================
 
 import time
 import os
-# Menggunakan PollingObserver (Bukan Observer biasa) karena sistem file di Docker/Network 
-# sering kali tidak mengirimkan event 'inotify' secara native.
+from dotenv import load_dotenv
+
+# Memanfaatkan PollingObserver untuk menjamin fungsionalitas deteksi di dalam Docker Volume
 from watchdog.observers.polling import PollingObserver as Observer
 from watchdog.events import FileSystemEventHandler
 from extractor import process_metadata
 
+# Memuat konfigurasi environment variables global
+load_dotenv()
+DEFAULT_WATCH_DIR = os.getenv("STAGING_PATH", "data/staging")
+
 class EzSignHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        # Trigger saat file yang sudah ada di-update atau ditimpa (misal: re-upload)
-        self.process(event)
+    """
+    Kelas Pendengar Aktivitas (Event Handler):
+    Bertugas mendefinisikan respon sistem terhadap manipulasi berkas di ruang penyimpanan.
+    """
+    def __init__(self):
+        super().__init__()
+        # Cache internal untuk mencegah duplikasi eksekusi berkas dalam rentang waktu berdekatan (De-duplication Buffer)
+        self.recent_processed = {}
 
     def on_created(self, event):
-        # Trigger saat ada file baru yang baru saja masuk ke folder
+        """Memicu proses eksklusif saat alokasi berkas baru pertama kali tercipta."""
         self.process(event)
     
     def process(self, event):
         """
-        LOGIKA INGESTION: Memastikan hanya file PDF/JSON yang diproses.
+        Logika Pemrosesan Ingestion:
+        Menyeleksi ekstensi berkas yang valid sebelum dialirkan menuju modul ekstraktor forensik.
         """
-        # Print log untuk kebutuhan debugging setiap ada aktivitas file system
-        print(f"🔍 [DEBUG] Ada gerakan di: {event.src_path}")
+        # Eliminasi deteksi jika objek yang tertangkap adalah struktur direktori
+        if event.is_directory:
+            return
 
-        # Validasi: Pastikan objek bukan direktori dan memiliki ekstensi yang diizinkan
-        if not event.is_directory and event.src_path.lower().endswith(('.pdf', '.json')):
-            print(f"🆕 [WATCHER] File valid terdeteksi: {os.path.basename(event.src_path)}")
+        src_path = event.src_path
+        filename = os.path.basename(src_path)
 
-            # RACE CONDITION PROTECTION:
-            # Memberikan jeda 2 detik agar proses copy file dari luar kontainer selesai sempurna
-            # sebelum file tersebut dibuka oleh library extractor (mencegah error 'File in Use').
+        # --- [BENTENG PROTEKSI 1: TEMPORARY FILE BLOCKER] ---
+        # Menolak berkas sampah sementara hasil sinkronisasi OS host / browser buffer
+        if filename.startswith("~$") or filename.startswith(".") or filename.endswith(".tmp"):
+            return
+
+        # Validasi Skema: Memastikan file mematuhi ekstensi kriptografi dan log target
+        if src_path.lower().endswith(('.pdf', '.json')):
+            now = time.time()
+            
+            # --- [BENTENG PROTEKSI 2: DE-DUPLICATION COOLDOWN LAYER] ---
+            # Jika berkas yang sama tertangkap dua kali dalam rentang 3 detik, abaikan trigger kedua
+            if src_path in self.recent_processed:
+                if now - self.recent_processed[src_path] < 3:
+                    return
+            
+            self.recent_processed[src_path] = now
+            print(f"🆕 [INGESTION ALERT] Berkas valid teridentifikasi: {filename}")
+
+            # --- [RACE CONDITION PROTECTION PROTOCOL] ---
+            # Jeda waktu kritis 2 detik untuk menjamin operasi write stream dari hulu I/O selesai sempurna (EOF)
             time.sleep(2) 
 
             try:
-                # Memanggil core logic untuk ekstraksi metadata TTE
-                process_metadata(event.src_path)
-                print(f"✅ [WATCHER] Sukses proses: {os.path.basename(event.src_path)}")
+                # Mengeksekusi modul inti (Core Logic) untuk ekstraksi metadata kriptografi TTE
+                result = process_metadata(src_path)
+                print(f"✅ [PROCESS COMPLETED] Berkas '{filename}' berhasil diekstraksi ke warehouse.")
+                
             except Exception as e:
-                # Error Catching agar satpam (watcher) tidak 'pingsan' saat satu file korup
-                print(f"❌ [WATCHER] Error pas eksekusi extractor: {e}")
+                # Isolasi kegagalan agar tidak merusak keberlangsungan Daemon Process secara global
+                print(f"❌ [EXTRACTION ERROR] Gagal melakukan ekstraksi forensik pada berkas '{filename}'. Detail: {e}")
+
 
 if __name__ == "__main__":
-    # Paksa pake path Docker yang kita tau tadi 'ls'-nya ada
-    # DIRECTORY CONFIGURATION:
-    WATCH_DIRECTORY = "/data/staging"
+    print("\n" + "="*65)
+    print("📡 [DAEMON INITIALIZED] EZSIGN AUTOMATED FILE WATCHER ACTIVATED")
+    print("="*65)
+    
+    # Sinkronisasi path otomatis yang adaptif terhadap mounting container Docker maupun lokal workstation
+    WATCH_DIRECTORY = DEFAULT_WATCH_DIR
+    if WATCH_DIRECTORY == "/data/staging" and not os.path.exists(WATCH_DIRECTORY):
+        WATCH_DIRECTORY = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "staging"))
 
-    # Inisialisasi Satpam ezSign (Polling Mode)
-    print(f"🕵️‍♂️ Satpam ezSign (Polling Mode) mantau: {WATCH_DIRECTORY}")
+    print(f"[INFO] Lapisan Polling Aktif Mengawasi Direktori: {os.path.abspath(WATCH_DIRECTORY)}")
     
     event_handler = EzSignHandler()
 
-    # Timeout=1: Melakukan scanning folder setiap 1 detik secara konsisten.
-    observer = Observer(timeout=1) # Cek tiap 1 detik
+    # Mengatur interval pooling pemindaian direktori setiap 1 detik demi efisiensi resource CPU
+    observer = Observer(timeout=1) 
     observer.schedule(event_handler, WATCH_DIRECTORY, recursive=False)
     observer.start()
     
     try:
-        # Menjaga script agar tetap running selamanya (Daemon-like)
+        # Loop tak berhingga (Infinite Loop Execution) untuk menjaga status keaktifan background service
         while True:
             time.sleep(1)
+            
     except KeyboardInterrupt:
-        # Shutdown sequence yang rapi saat user menekan Ctrl+C
-        print("🛑 [WATCHER] Mematikan sistem monitoring...")
+        print("\n🛑 [SYSTEM HALT] Menerima sinyal interupsi manual. Menghentikan Daemon Watcher...")
         observer.stop()
+        
+    # Menjamin seluruh antrean data diselesaikan secara bersih sebelum terminasi service (Graceful Shutdown)
     observer.join()
+    print("[STATUS] Daemon Process Dihentikan Dengan Aman. Wilayah Staging Dilepas.")
+    print("="*65 + "\n")

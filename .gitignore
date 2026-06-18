@@ -1,44 +1,61 @@
-# ==========================================
-# 🛡️ DATA PRIVACY & STORAGE (UU PDP Compliance)
-# ==========================================
-# Isolasi folder data agar database SQLite lokal tidak ikut ter-push ke GitHub.
-# Hal ini untuk mencegah kebocoran data transaksi riil perusahaan.
-# Amankan semua isi folder data
-data/
+# =============================================================================
+# 🛡️ MODULE: DATA PRIVACY & STORAGE (UU PDP COMPLIANCE LAYER)
+# =============================================================================
+# Mengisolasi isi direktori data menggunakan wildcard (*) agar file database relasional 
+# database.sqlite TIDAK AKAN PERNAH bocor ke repositori publik (Data Sovereignty).
+data/*
 
-# Kecualikan folder staging agar struktur folder tetap terjaga di Git.
+# Pengecualian taktis: Mempertahankan eksistensi fisik folder structural di dalam Git 
+# agar pipeline Ingestion/ETL di Docker tidak crash akibat hilangnya direktori staging.
+!data/staging/
 !data/staging/.gitkeep
+!data/staging/psre_files/
 
-# ==========================================
-# 🔑 SECURITY & ENVIRONMENT VARIABLES
-# ==========================================
-# Mengamankan file konfigurasi sensitif (API Keys, Database Credentials).
-# WAJIB: Jangan pernah menghapus baris ini agar rahasia perusahaan tetap aman.
+# =============================================================================
+# 🔑 MODULE: SECURITY & ENVIRONMENT VARIABLES (ANTI-LEAK PROTOCOL)
+# =============================================================================
+# Mengunci seluruh variasi berkas konfigurasi lingkungan rahasia di tingkat root 
+# maupun sub-direktori terdalam (Multi-Layer Protection) demi mematuhi regulasi UU PDP.
+**/.env
+**/.env.*
+**/*.env
 .env
-*.env
+.env.local
+.env.development
+.env.production
 
-# ==========================================
-# 📦 DEPENDENCIES & VIRTUAL ENVIRONMENTS
-# ==========================================
-# Folder library yang sizenya giga-an, tidak perlu masuk Git (cukup install via pnpm/pip).
+# =============================================================================
+# 📦 MODULE: DEPENDENCIES & VIRTUAL ENVIRONMENTS
+# =============================================================================
+# Mengabaikan tumpukan dependensi raksasa. Manajemen paket dieksekusi via CI/CD pipelines.
 node_modules/
 .venv/
 venv/
+ENV/
+env/
+*.piplog
+spec/[0-9]*.txt
 
-# ==========================================
-# ⚡ BUILD OUTPUTS & CACHE (Performance)
-# ==========================================
-# Menghapus 'sampah' kompilasi agar repo tetap ringan dan bebas conflict.
+# =============================================================================
+# ⚡ MODULE: BUILD OUTPUTS & CACHE OPTIMIZATION
+# =============================================================================
+# Mengeliminasi artefak kompilasi dan temporary cache untuk efisiensi space repo.
 .next/
 .turbo/
 out/
+dist/
 build/
+bin/
+obj/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
 
-# ==========================================
-# 🚀 PROJECT ISOLATION (Collaboration Strategy)
-# ==========================================
-# Memisahkan repositori Frontend jika dikembangkan dalam sub-folder terpisah.
-# Hal ini untuk menghindari 'Nested Git' yang membingungkan saat push/pull.
+# =============================================================================
+# 🚀 MODULE: PROJECT ISOLATION (MICRO-FRONTEND COLLABORATION STRATEGY)
+# =============================================================================
+# Pemisahan/Pengecualian folder repo antarmuka terdekopel guna mencegah anomali Nested Git.
 ezsign-frontend/

@@ -1,34 +1,67 @@
+# =============================================================================
+# 🕵️‍♂️ MODULE: AUTOMATED CRYPTOGRAPHIC METADATA FORENSIC EXTRACTOR ENGINE
+# =============================================================================
+# 📌 CONFIGURATION : PDF Signature Extractor & Multidimensional DW Ingestion
+# 📅 UPDATE        : 5 Juni 2026
+# 🔬 CORE ENGINE   : PyMuPDF (fitz) & pikepdf Binarization Parser
+# ⚖️ REGULASI TI   : Implementasi Data Quality Assurance - Kepatuhan UU ITE
+# =============================================================================
+# 🗺️ DOKUMEN TATA KERJA FUNGSIONAL (FOR NEXT DEVELOPER):
+#
+# 1. METODE EKSTRAKSI INTEGRITAS (DUAL-STRATEGY SCANNER):
+#    Modul ini membaca berkas dokumen digital (.pdf atau .json) dari staging area.
+#    Proses ekstraksi bytes sertifikat menggunakan dua pendekatan paralel guna
+#    menghindari kegagalan pembacaan: AcroForm Field Parsing dan Object Bruteforce.
+#
+# 2. TRANSFORMASI DATA KRIPTOGRAFI (PARSING LAYER):
+#    - Menghitung keunikan identitas digital via SHA-1 Fingerprint.
+#    - Melakukan standardisasi string Distinguished Name (DN) untuk Issuer/Subject.
+#    - Melakukan parsing rentang waktu validitas sertifikat (Validity Countdown).
+#
+# 3. FASE INGESTION KE STAR SCHEMA DATA WAREHOUSE:
+#    Data yang berhasil tervalidasi kemudian dipecah secara atomik ke dalam 
+#    tabel dimensi (C1: Signer, C2: Issuer, C3: Date, C4: Corporate, C5: Integrity)
+#    dan dikunci ke dalam tabel fakta pusat (esa_fact_verifications).
+# =============================================================================
+
 import hashlib
 import json
 import os
 import re
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import fitz  # PyMuPDF
 import pikepdf
 from asn1crypto import cms
 from dotenv import load_dotenv
 
-
+# Memuat konfigurasi environment variables global
 load_dotenv()
 DB_PATH = os.getenv("DATABASE_PATH", "data/database.sqlite")
 CORPO_CODE = os.getenv("CORPORATE_CODE", "ezsign")
 CORPO_NAME = os.getenv("CORPORATE_NAME", "PT Solusi Identitas Global Net")
 
+# Standar Otoritas Sertifikasi Digital Berinduk yang diakui secara hukum oleh Kominfo
 PSRE_BERINDUK = ["BSRE", "BSSN", "PERURI", "PRIVY", "VIDA", "TILAKA", "DIGISIGN", "EZSIGN"]
 
 
 def get_db_connection():
+    """Membuka koneksi database relasional SQLite dengan parameter timeout pengaman."""
     return sqlite3.connect(DB_PATH, timeout=20)
 
 
 def stable_id(value: str) -> str:
+    """Menghasilkan representasi ID unik yang konsisten menggunakan algoritma enkripsi SHA-1."""
     return hashlib.sha1(value.encode("utf-8", errors="ignore")).hexdigest().upper()
 
 
 def parse_validity_days(validity_str):
+    """
+    Menghitung sisa masa aktif sertifikat digital (countdown hari).
+    Mengembalikan tuple: (Jumlah Hari Aktif, Status Eksperasi Biner [1=Expired, 0=Active]).
+    """
     if not validity_str:
         return 0, 0
 
@@ -52,7 +85,8 @@ def parse_validity_days(validity_str):
 
 
 def parse_issuer_atomic(dn_str):
-    res = {"CN": None, "O": None, "C": None}
+    """Memecah komponen Distinguished Name (DN) sertifikat menjadi elemen CN, O, dan C secara atomik."""
+    res = {"CN": "Unknown", "O": "Personal", "C": "ID"}
     if not dn_str or dn_str == "None":
         return res
 
@@ -70,9 +104,6 @@ def parse_issuer_atomic(dn_str):
                 res["O"] = value
             elif key == "C":
                 res["C"] = value
-
-        if not res["CN"]:
-            res["CN"] = str(dn_str)[:100]
     except Exception:
         pass
 
@@ -80,6 +111,7 @@ def parse_issuer_atomic(dn_str):
 
 
 def _collect_signature_fields_from_acroform(pdf):
+    """Mengekstraksi bytes tanda tangan digital melalui pemindaian kamus AcroForm PDF."""
     by_field = {}
     root = pdf.Root
     if "/AcroForm" not in root:
@@ -108,6 +140,7 @@ def _collect_signature_fields_from_acroform(pdf):
 
 
 def _collect_signature_fields_bruteforce(pdf):
+    """Mengekstraksi bytes tanda tangan digital via metode Bruteforce Object Scanning."""
     by_field = {}
     try:
         objects_iter = getattr(pdf, "objects", None)
@@ -126,12 +159,13 @@ def _collect_signature_fields_bruteforce(pdf):
                 continue
             by_field[field_name] = contents if isinstance(contents, bytes) else bytes(contents)
     except Exception as e:
-        print(f"[EXTRACTOR] Bruteforce scan warning: {e}")
+        print(f"[EXTRACTOR WARNING] Skrining struktur objek eksternal menemukan hambatan: {e}")
 
     return by_field
 
 
 def extract_signature_bytes_from_pdf(pdf_path):
+    """Menggabungkan hasil ekstraksi tanda tangan digital dari metode AcroForm dan Bruteforce Analysis."""
     by_field = {}
     try:
         with pikepdf.open(pdf_path) as pdf:
@@ -139,12 +173,13 @@ def extract_signature_bytes_from_pdf(pdf_path):
             for name, sig in _collect_signature_fields_bruteforce(pdf).items():
                 by_field.setdefault(name, sig)
     except Exception as e:
-        print(f"[EXTRACTOR] pikepdf error: {e}")
+        print(f"[EXTRACTOR ERROR] Gagal mengekstrak biner dari dokumen PDF via pikepdf: {e}")
 
     return by_field
 
 
 def extract_real_cert_metadata(sig_contents):
+    """Membedah biner kriptografi sertifikat digital ASN.1 untuk mengekstrak metadata identitas penandatangan."""
     try:
         if not sig_contents:
             return None
@@ -201,7 +236,7 @@ def extract_real_cert_metadata(sig_contents):
             "Signature": "verified",
         }
     except Exception as e:
-        print(f"[DEBUG] Gagal bedah biner: {e}")
+        print(f"[DEBUG MONITOR] Gagal memproses struktur biner sertifikat digital: {e}")
         return {
             "code": 1003,
             "Issuer": "-",
@@ -214,6 +249,7 @@ def extract_real_cert_metadata(sig_contents):
 
 
 def normalize_json_entry(entry, parent_code=200):
+    """Melakukan standardisasi penamaan kunci (key normalization) pada payload JSON transaksional."""
     signer = entry.get("Signer") or entry.get("Signer ")
     subject_dn = entry.get("SubjectDN")
     issuer = entry.get("Issuer")
@@ -253,6 +289,7 @@ def normalize_json_entry(entry, parent_code=200):
 
 
 def build_entries_from_json(raw_file_path):
+    """Membaca berkas log JSON sekaligus melakukan pembungkusan fallback jika terjadi malformasi payload."""
     with open(raw_file_path, "r", encoding="utf-8") as f:
         payload = json.load(f)
 
@@ -290,6 +327,7 @@ def build_entries_from_json(raw_file_path):
 
 
 def validate_pdf_integrity(doc):
+    """Memeriksa integritas struktur halaman berkas PDF secara mutlak dari manipulasi anotasi eksternal."""
     for page in doc:
         if page.annots():
             return "Invalid"
@@ -297,6 +335,7 @@ def validate_pdf_integrity(doc):
 
 
 def build_entries_from_pdf(raw_file_path):
+    """Membedah dokumen PDF secara forensik digital guna merakit muatan baris entri metadata data warehouse."""
     entries = []
     global_ts = int(time.time() * 1000)
 
@@ -304,7 +343,6 @@ def build_entries_from_pdf(raw_file_path):
         hash_status = validate_pdf_integrity(doc)
         sig_bytes_map = extract_signature_bytes_from_pdf(raw_file_path)
 
-        # FE expects empty array for no signature so it can show no_signature banner.
         if not sig_bytes_map:
             return [], global_ts
 
@@ -348,6 +386,7 @@ def build_entries_from_pdf(raw_file_path):
 
 
 def ensure_dim_date(cursor, dt_obj):
+    """Menjamin eksistensi rekaman waktu pada tabel Dimensi Waktu (C3) secara idempotent."""
     full_date = dt_obj.strftime("%Y-%m-%d")
     row = cursor.execute(
         "SELECT c3_date_key FROM esa_dim_date_c3 WHERE c3_full_date=? AND c3_hour=?",
@@ -366,6 +405,7 @@ def ensure_dim_date(cursor, dt_obj):
 
 
 def ensure_dim_corporate(cursor):
+    """Menjamin eksistensi rekaman institusi pada tabel Dimensi Perusahaan (C4) secara idempotent."""
     row = cursor.execute(
         "SELECT c4_corpo_key FROM esa_dim_corporate_c4 WHERE c4_corpo_code=?",
         (CORPO_CODE,),
@@ -381,41 +421,49 @@ def ensure_dim_corporate(cursor):
 
 
 def ingest_entries(cursor, entries, global_ts, raw_file_path):
-    dt_obj = datetime.fromtimestamp(global_ts / 1000)
-    readable_ts = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
-    doc_id = f"DOC-{stable_id(f'{raw_file_path}:{global_ts}')[:16]}"
+    """Mengeksekusi loading data (fase akhir ETL) ke skema bintang database relasional multidimensi."""
+    # Sinkronisasi format penanggalan berbasis string ISO demi stabilitas pembacaan dashboard OLAP
+    dt_obj = datetime.fromtimestamp(global_ts / 1000, tz=timezone.utc) + timedelta(hours=7)
+    iso_time_string = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
 
+    doc_id = f"DOC-{stable_id(f'{raw_file_path}:{global_ts}')[:16]}"
     date_id = ensure_dim_date(cursor, dt_obj)
     corpo_id = ensure_dim_corporate(cursor)
 
     for entry in entries:
         signer_name = entry.get("Signer") or entry.get("Signer ") or "No Signer Found"
         subject_dn = entry.get("SubjectDN") or "N/A"
-        serial_number = entry.get("Serial Number") or entry.get("SerialNumber")
+        serial_number = entry.get("Serial Number") or entry.get("SerialNumber") or "-"
         issuer_raw = entry.get("Issuer") or "None"
 
         signer_fingerprint = entry.get("SHA-1 Fingerprint") or stable_id(
-            f"{signer_name}|{subject_dn}|{serial_number or issuer_raw}"
+            f"{signer_name}|{subject_dn}|{serial_number}"
         )
-
-        cursor.execute(
-            """INSERT OR IGNORE INTO esa_dim_signer_c1
-               (c1_signer_name, c1_subject_dn, c1_serial_number, c1_sha1_fingerprint)
-               VALUES (?, ?, ?, ?)""",
-            (signer_name, subject_dn, serial_number, signer_fingerprint),
-        )
-        signer_id = cursor.execute(
-            "SELECT c1_signer_key FROM esa_dim_signer_c1 WHERE c1_sha1_fingerprint=?",
-            (signer_fingerprint,),
-        ).fetchone()[0]
 
         issuer_parts = parse_issuer_atomic(issuer_raw)
+        signer_org = issuer_parts["O"] if issuer_parts["O"] != "Personal" else "Personal"
+
+        # SINKRONISASI SCHEMA: Menyesuaikan nama kolom sesuai spesifikasi Data Warehouse Gateway
+        cursor.execute(
+            """INSERT OR IGNORE INTO esa_dim_signer_c1
+               (c1_common_name, c1_serial_number, c1_organization, c1_country, c1_sha1_fingerprint, c1_full_subject_dn)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (signer_name, serial_number, signer_org, issuer_parts["C"], signer_fingerprint, subject_dn),
+        )
+        
+        signer_row = cursor.execute(
+            "SELECT c1_signer_key FROM esa_dim_signer_c1 WHERE c1_sha1_fingerprint=?",
+            (signer_fingerprint,),
+        ).fetchone()
+        signer_id = signer_row[0] if signer_row else 1
+
         is_berinduk = 1 if any(psre in issuer_raw.upper() for psre in PSRE_BERINDUK) else 0
 
         existing_issuer = cursor.execute(
             "SELECT c2_issuer_key FROM esa_dim_issuer_c2 WHERE c2_full_distinguished_name=?",
             (issuer_raw,),
         ).fetchone()
+        
         if existing_issuer:
             issuer_id = existing_issuer[0]
         else:
@@ -428,7 +476,7 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
                     issuer_parts["CN"],
                     issuer_parts["O"],
                     issuer_parts["C"],
-                    entry.get("Signature Algorithm") or entry.get("SignatureAlgorithm"),
+                    entry.get("Signature Algorithm") or "RSA/SHA256",
                     is_berinduk,
                 ),
             )
@@ -447,8 +495,8 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
                 entry.get("File hash Validation") or "N/A",
                 entry.get("Error Undefined") or "",
                 entry.get("Reason") or "",
-                entry.get("Location") or "",
-                entry.get("LocalTimestamp") or readable_ts,
+                entry.get("Location") or "Indonesia",
+                entry.get("LocalTimestamp") or iso_time_string,
             ),
         )
         integrity_id = cursor.lastrowid
@@ -459,29 +507,23 @@ def ingest_entries(cursor, entries, global_ts, raw_file_path):
             """INSERT INTO esa_fact_verifications (
                 f1_doc_id, c1_signer_key, c2_issuer_key, c3_date_key, c4_corpo_key, c5_integrity_key,
                 f1_is_trusted, f1_is_expired, f1_validity_days, f1_ltv_status, f1_tsa_status,
-                f1_hash_status, f1_sig_status, f1_chain_status, f1_signing_time
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                f1_hash_status, f1_sig_status, f1_chain_status, f1_signing_time, f1_ingested_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                doc_id,
-                signer_id,
-                issuer_id,
-                date_id,
-                corpo_id,
-                integrity_id,
-                is_trusted,
-                is_expired,
-                days_left,
+                doc_id, signer_id, issuer_id, date_id, corpo_id, integrity_id,
+                is_trusted, is_expired, days_left,
                 entry.get("LTV") or "Not Support LTV",
                 entry.get("timestamp signature") or entry.get("TSA Info") or "N/A",
                 entry.get("File hash Validation") or "N/A",
                 entry.get("Signature") or "N/A",
                 entry.get("Verify_Certificate_Chain") or "N/A",
-                global_ts,
+                iso_time_string, iso_time_string  # Menjamin konsistensi pencarian string OLAP
             ),
         )
 
 
 def process_metadata(raw_file_path):
+    """Fungsi Orkestrator Utama untuk memproses penentuan rute ekstensi file dan melakukan commit transaksi DB."""
     file_ext = os.path.splitext(raw_file_path)[1].lower()
 
     if file_ext == ".json":
@@ -489,20 +531,19 @@ def process_metadata(raw_file_path):
     elif file_ext == ".pdf":
         entries, global_ts = build_entries_from_pdf(raw_file_path)
     else:
-        return {"status": "error", "message": f"Format {file_ext} gak disupport, Ca!"}
+        return {"status": "error", "message": f"Format ekstensi berkas {file_ext} tidak didukung."}
 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Always return data for FE; DB ingestion runs only when there are entries.
         if entries:
             ingest_entries(cursor, entries, global_ts, raw_file_path)
         conn.commit()
-        print(f"[SLAY] {os.path.basename(raw_file_path)}: Sukses ({len(entries)} entries)")
+        print(f"[SUCCESS] {os.path.basename(raw_file_path)}: Ingestion berhasil ({len(entries)} entri terproses).")
         return {"status": "success", "data": entries}
     except Exception as e:
         conn.rollback()
-        print(f"[FAIL] {e}")
+        print(f"[FAILURE] Ingestion data dibatalkan akibat kendala teknis: {e}")
         return {"status": "error", "message": str(e)}
     finally:
         conn.close()

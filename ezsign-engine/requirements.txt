@@ -1,41 +1,52 @@
-# =================================================================
-# 📦 EZSIGN ANALYTICS ENGINE - DEPENDENCIES LIST
-# =================================================================
-# File ini mendefinisikan seluruh library Python yang dibutuhkan.
-# Gunakan: pip install -r requirements.txt
-# =================================================================
+# =============================================================================
+# 📦 MODULE: EZSIGN ANALYTICS ENGINE - SYSTEM DEPENDENCIES (BILL OF MATERIALS)
+# =============================================================================
+# 📌 CONFIGURATION : Environment Requirements & Package Management
+# 📅 UPDATE        : 5 Juni 2026
+# 🛡️ OBJECTIVE     : Standardisasi Pustaka Lingkungan Python (Production-Ready)
+# =============================================================================
+# Instruksi Instalasi:
+# Eksekusi perintah berikut pada terminal lingkungan virtual (Virtual Environment):
+# $ pip install --no-cache-dir -r requirements.txt
+# =============================================================================
 
-# --- [1] DATABASE & CORE PROCESSING (The Brain) ---
-# Mengelola aliran data dari mentah menjadi tabel terstruktur (Star Schema).
-sqlalchemy   # ORM: Translator antara logika Python dan SQL Database SQLite.
-pandas       # Data Wrangling: Raja pengolah tabel (DataFrame) untuk agregasi & rekapitulasi.
+# --- [1] CORE DATA PROCESSING & ORM LAYER ---
+# Mengelola manipulasi data multidimensi dan persistensi ke sistem basis data relasional.
+SQLAlchemy==2.0.30       # Object-Relational Mapping (ORM): Fasilitator transaksi logika Python menuju SQLite.
+pandas==2.2.2           # Data Wrangling: Pustaka komputasi DataFrame untuk agregasi, normalisasi, dan rekapitulasi data.
+numpy==1.26.4            # Linear Algebra Engine: Komputasi matriks berperforma tinggi untuk evaluasi bobot risiko MADM (SAW/WP).
 
-# --- [2] FILE SYSTEM & AUTOMATION (The Watcher) ---
-# Mekanisme otomasi untuk mendeteksi data baru secara real-time.
-watchdog     # 'Satpam' Folder: Mendeteksi secara otomatis saat ada PDF baru masuk ke folder staging.
+# --- [2] AUTOMATED FILE SYSTEM OBSERVER ---
+# Mekanisme pemantauan subsistem direktori I/O secara real-time.
+watchdog==4.0.1          # Event Handler: Pendeteksi anomali/injeksi berkas baru pada direktori staging (Continuous Ingestion).
 
-# --- [3] PDF & SECURITY EXTRACTION (The Forensic Tools) ---
-# Tools utama untuk membedah Tanda Tangan Elektronik (TTE) & Sertifikat Digital.
-pymupdf      # PDF Engine: Membuka dan membaca struktur dasar dokumen PDF secara cepat.
-pikepdf      # Crypto-Extractor: Mengambil data sertifikat digital (bytes) dari dalam PDF.
-asn1crypto   # Certificate Parser: Membedah isi sertifikat untuk validasi Issuer, SN, dan Masa Berlaku.
+# --- [3] CRYPTOGRAPHIC & FORENSIC EXTRACTION LAYER ---
+# Utilitas pembedahan struktur biner Tanda Tangan Elektronik (TTE) dan Sertifikat Digital.
+PyMuPDF==1.24.5          # PDF Engine (fitz): Parser struktur lapisan dasar dokumen PDF berkinerja tinggi.
+pikepdf==8.15.1          # Crypto-Extractor: Pengekstrak biner (bytes) objek sertifikat dari dalam struktur PDF.
+asn1crypto==1.5.1        # Certificate Decoder: Parser standar ASN.1 untuk dekripsi metadata sertifikat (Issuer, Subject, Expiration).
 
-# --- [4] API & BACKEND INFRASTRUCTURE (The Bridge) ---
-# Infrastruktur komunikasi data antar modul (Engine <-> Frontend).
-python-dotenv    # Security: Mengamankan konfigurasi sensitif (Secret Keys/Paths) dari file .env.
-fastapi          # Modern Web Framework: Engine API berperforma tinggi (High-Speed Ingestion).
-uvicorn          # ASGI Server: Mesin untuk menjalankan aplikasi FastAPI.
-python-multipart # File Handler: Pendukung agar sistem bisa menerima upload file via API.
-flask            # Micro Framework: Library tambahan untuk penanganan routing tertentu.
-flask-cors       # Cross-Origin: Memberikan izin akses agar Dashboard tidak diblokir saat request data.
+# --- [4] MICROSERVICE API & MIDDLEWARE INFRASTRUCTURE ---
+# Infrastruktur komunikasi terdekopel (Decoupled) antara lapisan komputasi (Engine) dan antarmuka (Frontend).
+# Note: Flask & Flask-CORS dieliminasi mutlak demi efisiensi kapasitas image container (Anti-Bloat Protection).
+python-dotenv==1.0.1     # Environment Security: Pengelola variabel rahasia (Secret Keys/Paths) dari berkas .env.
+fastapi==0.111.0         # Asynchronous Web Framework: Kerangka kerja API berkinerja tinggi untuk gerbang Ingestion.
+uvicorn==0.30.1          # ASGI Server: Mesin eksekusi standar industri untuk aplikasi FastAPI.
+python-multipart==0.0.9  # Payload Handler: Parser form-data untuk memfasilitasi transmisi unggahan berkas biner via API.
 
-# --- [5] DATA VISUALIZATION & DASHBOARD (The Visualizer) ---
-# Komponen untuk membangun antarmuka analisis yang interaktif.
-streamlit    # Dashboard Framework: Framework utama untuk UI Dashboard EzSign.
-plotly       # Interactive Charts: Membuat grafik (Pie Chart/Trend) yang responsif & bisa di-hover.
-requests     # HTTP Client: Jembatan agar Dashboard bisa 'memanggil' API Engine untuk fetch data.
+# --- [5] FRONTEND ANALYTICS & VISUALIZATION LAYER ---
+# Komponen penyusunan antarmuka visualisasi data operasional (OLAP).
+streamlit>=1.37.0       # Declarative UI Framework: Kerangka kerja utama konstruksi antarmuka Dashboard EzSign Analytics.
+plotly==5.22.0           # Interactive Visualization: Pustaka perender grafik analitik responsif (Pie/Trend/Bar Chart).
+requests==2.32.3         # Synchronous HTTP Client: Jembatan komunikasi REST API dari antarmuka Dashboard menuju Engine.
 
-# --- [6] WEB INTELLIGENCE & SCRAPING (Pre-Audit W12) ---
-# Tools untuk otomasi browser dan validasi data eksternal (PSrE Check).
-selenium          # Browser Automation: Menggerakkan browser otomatis untuk validasi web.
-webdriver-manager # Driver Utility: Mengelola driver browser agar selalu up-to-date secara otomatis.
+# --- [6] AUTOMATED WEB INTELLIGENCE & SCRAPING LAYER ---
+# Utilitas otomasi peramban siluman untuk validasi aset kriptografi eksternal lintas PSrE.
+selenium==4.21.0         # Browser Automation: Kerangka penggerak peramban otomatis (Headless Mode) untuk pemindaian siber.
+webdriver-manager==4.0.1 # Driver Utility: Manajer biner otomatis guna memastikan kompatibilitas versi browser driver.
+beautifulsoup4==4.12.3   # HTML Parser: Pustaka penunjang untuk ekstraksi tag DOM dan pembersihan data hasil rayapan siber.
+
+streamlit-option-menu
+streamlit-authenticator
+pyyaml
+streamlit-plotly-events

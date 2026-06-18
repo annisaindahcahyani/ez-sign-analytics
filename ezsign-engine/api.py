@@ -1,29 +1,72 @@
+# =============================================================================
+# 🚀 MODULE: FASTAPI INGESTION GATEWAY (MICROSERVICE LAYER)
+# =============================================================================
+# 📌 CONFIGURATION : RESTful API Endpoint & Middleware Router
+# 📅 UPDATE        : 5 Juni 2026
+# 🛡️ OBJECTIVE     : Fasilitator Unggah Berkas & Orkestrasi Ekstraksi Forensik
+# ⚙️ ARCHITECTURE  : Decoupled System (Pemisahan Frontend & Backend)
+# =============================================================================
+# 🗺️ DOKUMEN TATA KERJA FUNGSIONAL PENGEMBANG (FOR NEXT DEVELOPER):
+#
+# 1. ARSITEKTUR JARINGAN & MIDDLEWARE (CORS):
+#    Berfungsi sebagai jembatan independen. Kebijakan Cross-Origin Resource 
+#    Sharing (CORS) diatur menjadi Wildcard ('*') untuk memastikan antarmuka 
+#    eksternal (seperti Next.js atau Streamlit) dapat melakukan pemanggilan
+#    AJAX/Fetch tanpa terhalang restriksi Same-Origin Policy dari peramban.
+#
+# 2. STANDARDIZASI KONTRAK API (API CONTRACT):
+#    Sistem mengadopsi standar respons JSON yang kaku (code, timestamp, message, 
+#    reason, data, success). Hal ini mempermudah subsistem lain dalam melakukan 
+#    parsing dan mencegah kegagalan aplikasi akibat perubahan struktur data.
+#
+# 3. PENANGANAN ANOMALI (FAULT TOLERANCE):
+#    Dilengkapi dengan blok try-except global untuk menjamin agar server (Uvicorn)
+#    tidak mengalami terminasi paksa (Crash) apabila terjadi kegagalan sistemik
+#    saat proses pembedahan berkas biner PDF.
+# =============================================================================
+
+import os
+import sys
+import shutil
+import time
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import shutil
-import os
-import time
-import sys
+from dotenv import load_dotenv
 
-# =================================================================
-# 🛠️ SYSTEM PATH CONFIGURATION
-# =================================================================
-# Mendaftarkan directory utama ke sys.path agar Python bisa mengenali 
-# modul-modul di dalam folder 'scripts' tanpa error "ModuleNotFound".
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if CURRENT_DIR not in sys.path:
-    sys.path.append(CURRENT_DIR)
+# =============================================================================
+# 🛠️ SYSTEM PATH RESOLUTION CONFIGURATION
+# =============================================================================
+# Memuat konfigurasi environment variables global demi konsistensi arsitektur
+load_dotenv()
 
-from scripts.extractor import process_metadata
+# Menginjeksikan direktori tingkat root secara dinamis untuk mengamankan resolusi modul internal
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
 
-# --- [INIT] FASTAPI APP ---
-app = FastAPI()
+# Melakukan fallback pencarian jika modul berada di hierarki monorepo tingkat atas
+PARENT_DIR = os.path.abspath(os.path.join(BASE_DIR, ".."))
+if PARENT_DIR not in sys.path:
+    sys.path.append(PARENT_DIR)
 
-# =================================================================
-# 🛡️ CORS MIDDLEWARE SETUP
-# =================================================================
-# Mengizinkan akses dari domain mana pun (Wildcard). 
-# Penting agar Frontend Dashboard (Streamlit/Next.js) bisa fetch data tanpa isu CORS.
+try:
+    # Memastikan pemetaan engine ekstraktor forensik TTE selaras tanpa ModuleNotFound Exception
+    from scripts.extractor import process_metadata
+except ModuleNotFoundError:
+    from extractor import process_metadata
+
+# --- [INISIALISASI INSTANS FASTAPI REST ENGINE] ---
+app = FastAPI(
+    title="EzSign Analytics Ingestion Gateway", 
+    description="RESTful API Microservice Layer for Automated Cryptographic Forensic Extraction",
+    version="2.0.0"
+)
+
+# =============================================================================
+# 🛡️ CROSS-ORIGIN RESOURCE SHARING (CORS) MIDDLEWARE
+# =============================================================================
+# Implementasi kebijakan jaringan terbuka untuk memfasilitasi komunikasi 
+# asinkron lintas domain pada arsitektur sistem yang terdekopel (Decoupled).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -31,64 +74,79 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Konfigurasi folder penampungan PDF sementara (Staging)
-STAGING_PATH = os.getenv("STAGING_PATH", os.path.join("data", "staging"))
+# Penetapan direktori persisten alokasi penyimpanan sementara (Staging Area) dari file .env
+STAGING_PATH = os.getenv("STAGING_PATH", os.path.join(BASE_DIR, "data", "staging"))
 
-# =================================================================
-# 🚀 ENDPOINT: VERIFY DOCUMENT
-# =================================================================
-# Endpoint utama untuk mengunggah PDF, mengekstrak metadata TTE,
-# dan mengembalikan hasil analisis dalam format JSON standar.
+# =============================================================================
+# 🚀 ENDPOINT OPERASIONAL: DOCUMENT VERIFICATION (/verify)
+# =============================================================================
 @app.post("/verify")
 async def verify_document(file: UploadFile = File(...)):
+    """
+    Titik akses utama (Primary Endpoint) klien untuk menginisiasi pengiriman dokumen, 
+    penulisan ke media penyimpanan, serta pendelegasian ekstraksi metadata.
+    """
+    current_ts = int(time.time() * 1000)
+    
+    # Validasi Dasar: Mencegah pengiriman muatan payload kosong atau tanpa nama berkas
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Invalid payload: File name is missing.")
+        
+    # Memastikan standarisasi pathing absolut adaptif di lingkungan Docker container
+    actual_staging_path = STAGING_PATH
+    os.makedirs(actual_staging_path, exist_ok=True)
+    file_path = os.path.join(actual_staging_path, file.filename)
+    
     try:
-        # --- 1. FILE INGESTION (Staging Phase) ---
-        # Memastikan directory staging ada, lalu menyimpan file upload secara fisik.
-        os.makedirs(STAGING_PATH, exist_ok=True)
-        file_path = os.path.join(STAGING_PATH, file.filename)
+        # --- [FASE 1: FILE INGESTION WITH DESCRIPTOR PROTECTION] ---
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # --- 2. FORENSIC EXTRACTION ---
-        # Memanggil modul extractor untuk membedah sertifikat digital di dalam PDF.
-        # Output yang diharapkan: List of dictionaries berisi detail penandatangan.
+        # --- [FASE 2: FORENSIC EXTRACTION DELEGATION] ---
+        # Memicu engine extractor untuk membedah muatan biner ASN.1 sertifikat secara terisolasi
         result = process_metadata(file_path)
-        current_ts = int(time.time() * 1000)
 
-        # --- 3. STANDARDIZED RESPONSE HANDLING ---
-        # Mengikuti struktur response yang konsisten untuk memudahkan integrasi FE/BE.
-        if result.get("status") == "success":
+        # --- [FASE 3: STANDARDIZED API RESPONSE CONTRACT] ---
+        if isinstance(result, dict) and result.get("status") != "error":
+            # Ekstraksi muatan data internal dari hasil komit repositori warehouse
+            extracted_data = result.get("data", []) if "data" in result else [result]
             return {
                 "code": 200,
-                "timestamp": current_ts,
+                "timestamp": int(time.time() * 1000),
                 "message": "Success",
                 "reason": "",
-                "data": result.get("data", []), # List detail Signer (C1, C2 metadata)
+                "data": extracted_data,
                 "success": True
             }
         else:
             return {
                 "code": 500,
-                "timestamp": current_ts,
+                "timestamp": int(time.time() * 1000),
                 "message": "Failed",
-                "reason": result.get("message", "Unknown error occurred"),
+                "reason": result.get("message") if isinstance(result, dict) else "Terjadi kegagalan ekstraksi manifes biner sertifikat.",
                 "data": [],
                 "success": False
             }
 
     except Exception as e:
-        # Catch-all error handling untuk mencegah server crash total
+        # --- [FASE 4: CATCH-ALL FAULT TOLERANCE CONTROL] ---
         return {
             "code": 500,
             "timestamp": int(time.time() * 1000),
             "message": "Failed",
-            "reason": str(e),
+            "reason": f"System Microservice Exception: {str(e)}",
             "data": [],
             "success": False
         }
+    finally:
+        # --- [FASE 5: GARBAGE COLLECTION & STORAGE FLUSH] ---
+        # Memaksa penutupan penunjuk file (Stream Pointer) untuk mengeliminasi resiko Memory Leak di Docker
+        await file.close()
 
-# --- [EXECUTION] ---
-# Menjalankan server Uvicorn pada host 0.0.0.0 agar bisa diakses di dalam Container Docker.
+# =============================================================================
+# ⚡ DAEMON EXECUTION LAYER
+# =============================================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Mengikat port internal kontainer pada port 8000 secara asinkron
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)

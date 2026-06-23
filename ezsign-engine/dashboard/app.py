@@ -107,6 +107,18 @@ else:
             st.session_state['logged_in'] = False
             st.rerun()
     # --- [1] FUNCTIONS ---
+
+    def get_min_date():
+        DB_PATH = "/data/database.sqlite"
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                result = conn.execute("SELECT MIN(DATE(f1_signing_time)) FROM esa_fact_verifications").fetchone()
+                if result and result[0]:
+                    return datetime.strptime(result[0], "%Y-%m-%d").date()
+        except Exception as e:
+            print(f"Error getting min date: {e}")
+        return datetime(2026, 5, 22).date()
+        
     def go_to_forensic(filter_value):
         st.session_state['current_page'] = "Forensic Log System"
         st.session_state['status_filter'] = filter_value # Ini kunci filternya
@@ -795,41 +807,44 @@ else:
             st.session_state['current_page'] = selected_menu
             st.rerun() # Penting buat nge-update tampilan sidebar & konten utama
 
-
+        # --- [2] SIDEBAR LAYER ---
         st.markdown("---")
         with st.sidebar:
             st.markdown("<p class='monitoring-label'>📅 RENTANG WAKTU PEMANTAUAN</p>", unsafe_allow_html=True)
             
-            # 1. Init Session State
-            if 'date_range' not in st.session_state:
-                st.session_state.date_range = (datetime(2024, 1, 1).date(), now_wib.date())
 
-            # 2. Input Tanggal
+            min_db_date = get_min_date()
+            
+            if 'date_range' not in st.session_state:
+                st.session_state.date_range = (min_db_date, now_wib.date())
+
             selected_dates = st.date_input(
                 "Jangka Waktu",
                 value=st.session_state.date_range,
+                min_value=min_db_date,
+                max_value=now_wib.date(),
                 key="date_range",
                 label_visibility="collapsed"
             )
 
-            # 3. Validasi Tanggal
             if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
                 start_dt, end_dt = selected_dates
             else:
                 start_dt = selected_dates[0] if isinstance(selected_dates, (list, tuple)) else selected_dates
-                end_dt = now_wib.date() # Ubah biar dinamis ke tanggal sekarang
+                end_dt = now_wib.date()
+            # --------------------------------
    
-        st.markdown("""
-            <div style="border-top: 1px solid #10b98120; padding-top: 15px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 32px; height: 32px; background: #063826; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #34d399; font-weight: bold; font-size: 14px;">A</div>
-                    <div style="display: flex; flex-direction: column;">
-                        <span style="color: #e8f4f0; font-size: 12px; font-weight: 600;">Admin</span>
-                        <span style="color: #64748b; font-size: 10px;">Analyst Intern</span>
+            st.markdown("""
+                <div style="border-top: 1px solid #10b98120; padding-top: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 32px; height: 32px; background: #063826; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #34d399; font-weight: bold; font-size: 14px;">A</div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="color: #e8f4f0; font-size: 12px; font-weight: 600;">Admin</span>
+                            <span style="color: #64748b; font-size: 10px;">Analyst Intern</span>
+                        </div>
                     </div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
     # --- [2.1] HEADER STICKY ---
     st.markdown('<div class="sticky-header-container">', unsafe_allow_html=True)

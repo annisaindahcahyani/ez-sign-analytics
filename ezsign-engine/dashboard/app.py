@@ -118,6 +118,19 @@ else:
         except Exception as e:
             print(f"Error getting min date: {e}")
         return datetime(2026, 5, 22).date()
+    
+    def get_data_range():
+        DB_PATH = "/data/database.sqlite"
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                result = conn.execute("SELECT MIN(DATE(f1_signing_time)), MAX(DATE(f1_signing_time)) FROM esa_fact_verifications").fetchone()
+                if result and result[0] and result[1]:
+                    min_d = datetime.strptime(result[0], "%Y-%m-%d")
+                    max_d = datetime.strptime(result[1], "%Y-%m-%d")
+                    return f"{min_d.strftime('%b %Y')} - {max_d.strftime('%b %Y')}"
+        except Exception as e:
+            print(f"Error getting date range: {e}")
+        return "Data n/a"
         
     def go_to_forensic(filter_value):
         st.session_state['current_page'] = "Forensic Log System"
@@ -985,7 +998,7 @@ else:
                                 <div>📋</div>
                             </div>
                             <div class="kpi-val">{total_v:,}</div>
-                            <div class="kpi-subtext">Jan 2024 - Jun 2026</div>
+                            <div class="kpi-subtext">{get_data_range()}</div>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)

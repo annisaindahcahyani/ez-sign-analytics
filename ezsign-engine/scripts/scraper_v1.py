@@ -45,7 +45,7 @@ from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
 # --- ARCHITECTURAL PATH CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
-ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, ".."))
+ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 
 CONFIG_FILE = os.path.join(ROOT_DIR, "data", "config", "targets.json")
 DOWNLOAD_DIR = os.path.join(ROOT_DIR, "data", "staging", "psre_files")
@@ -130,6 +130,20 @@ def download_file(url, psre_name):
             print(f"⚠️ [VALIDATION FAILED] Payload URL {url} terindikasi anomali non-kriptografi (Halaman Web/HTML Terdeteksi).")
             log_intelligence(psre_name, "N/A", url, "VALIDATION_FAILED_HTML")
             return
+
+        pure_filename = url.split('/')[-1].split('?')[0]  # Menghilangkan parameter query URI agar ekstensi file bersih
+        if not pure_filename:
+            pure_filename = f"extracted_asset_{int(time.time())}.pdf"
+            
+        file_name = f"{psre_name}_{pure_filename}"
+        file_name = "".join(x for x in file_name if x.isalnum() or x in "._-")
+        path = os.path.join(DOWNLOAD_DIR, file_name)
+
+        # SATPAM DEDUPLIKASI: Cek dulu barangnya udah ada apa belum!
+        if os.path.exists(path):
+            print(f"⏩ [DEDUPLICATION] Berkas {file_name} sudah eksis di lokal. Membatalkan pengunduhan berulang.")
+            log_intelligence(psre_name, file_name, url, "SUCCESS_CACHED")
+            return  # Langsung keluar, nggak usah lanjut download!
 
         # Pemrosesan stream unduhan biner
         response = requests.get(url, headers=headers, stream=True, timeout=15)
